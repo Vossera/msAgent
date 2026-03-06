@@ -14,7 +14,7 @@ if [[ -f "${REPO_ROOT}/.gitmodules" ]] && command -v git >/dev/null 2>&1; then
   if git -C "${REPO_ROOT}" config --file .gitmodules --get-regexp '^submodule\..*\.path$' \
     | awk '{print $2}' | grep -qx "skills"; then
     echo "Syncing skills submodule..."
-    git -C "${REPO_ROOT}" submodule update --init --recursive --depth 1 skills
+    git -C "${REPO_ROOT}" submodule update --init --recursive --force --depth 1 skills
   fi
 fi
 

@@ -85,10 +85,11 @@ uv sync
 uv run msagent chat --tui
 ```
 
-如果你已经完成普通 `git clone`，请补充执行：
+如果你已经完成普通 `git clone`，请补充执行拉取mindstudio-skills：
 
 ```bash
-git submodule update --init --recursive
+git submodule sync --recursive
+git submodule update --init --recursive --force
 ```
 
 ---
@@ -208,7 +209,7 @@ skills/
 bash scripts/build_whl.sh
 ```
 
-构建脚本会自动执行 `git submodule update --init --recursive --depth 1 skills`，确保 `mindstudio-skills` 被打入 wheel 包。
+构建脚本会自动执行 `git submodule update --init --recursive --force --depth 1 skills`，确保 `mindstudio-skills` 被打入 wheel 包。
 
 打包完成后会在 `dist/` 目录生成 `mindstudio_agent-*.whl`，可直接安装：
 
