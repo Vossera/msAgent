@@ -63,6 +63,7 @@ def test_config_command_updates_and_saves(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(cli_module, "console", dummy_console)
 
     config = AppConfig()
+    config.llm.max_tokens = 4096
     saved: dict[str, AppConfig | None] = {"value": None}
 
     class FakeConfigManager:
@@ -87,6 +88,38 @@ def test_config_command_updates_and_saves(monkeypatch: pytest.MonkeyPatch) -> No
     assert config.llm.api_key == "api-key"
     assert config.llm.base_url == "https://example.com/v1"
     assert config.llm.model == "gemini-model"
+    assert config.llm.max_tokens == 0
+
+
+def test_config_command_accepts_manual_llm_max_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dummy_console = DummyConsole()
+    monkeypatch.setattr(cli_module, "console", dummy_console)
+
+    config = AppConfig()
+    saved: dict[str, AppConfig | None] = {"value": None}
+
+    class FakeConfigManager:
+        def get_config(self) -> AppConfig:
+            return config
+
+        def save_config(self, new_config: AppConfig) -> None:
+            saved["value"] = new_config
+
+    monkeypatch.setattr(cli_module, "config_manager", FakeConfigManager())
+
+    cli_module.config_command(
+        show=False,
+        llm_provider="openai",
+        llm_api_key=None,
+        llm_base_url=None,
+        llm_model="deepseek-chat",
+        llm_max_tokens=64000,
+    )
+
+    assert saved["value"] is config
+    assert config.llm.max_tokens == 64000
 
 
 def test_mcp_command_add_requires_name_and_command(monkeypatch: pytest.MonkeyPatch) -> None:

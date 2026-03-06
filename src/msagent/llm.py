@@ -175,14 +175,17 @@ class DeepAgentsClient:
 
     def _build_model(self, config: LLMConfig):
         provider = (config.provider or "").lower()
+        resolved_api_key = config.resolve_api_key()
+        resolved_max_tokens = config.resolve_max_tokens()
 
         if provider in {"openai", "custom"}:
             kwargs: dict[str, Any] = {
                 "model": config.model,
-                "api_key": config.api_key,
+                "api_key": resolved_api_key,
                 "temperature": config.temperature,
-                "max_completion_tokens": config.max_tokens,
             }
+            if resolved_max_tokens is not None:
+                kwargs["max_completion_tokens"] = resolved_max_tokens
             if config.base_url:
                 kwargs["base_url"] = config.base_url
             return ChatOpenAI(**kwargs)
@@ -190,21 +193,24 @@ class DeepAgentsClient:
         if provider == "anthropic":
             kwargs = {
                 "model_name": config.model,
-                "api_key": config.api_key,
+                "api_key": resolved_api_key,
                 "temperature": config.temperature,
-                "max_tokens_to_sample": config.max_tokens,
             }
+            if resolved_max_tokens is not None:
+                kwargs["max_tokens_to_sample"] = resolved_max_tokens
             if config.base_url:
                 kwargs["base_url"] = config.base_url
             return ChatAnthropic(**kwargs)
 
         if provider == "gemini":
-            return ChatGoogleGenerativeAI(
-                model=config.model,
-                api_key=config.api_key,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-            )
+            kwargs = {
+                "model": config.model,
+                "api_key": resolved_api_key,
+                "temperature": config.temperature,
+            }
+            if resolved_max_tokens is not None:
+                kwargs["max_tokens"] = resolved_max_tokens
+            return ChatGoogleGenerativeAI(**kwargs)
 
         raise ValueError(f"Unsupported provider: {config.provider}")
 

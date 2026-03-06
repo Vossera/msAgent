@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from msagent.config import AppConfig, ConfigManager, LLMConfig, MCPConfig
+from msagent.config import (
+    AppConfig,
+    ConfigManager,
+    LLMConfig,
+    MCPConfig,
+)
 
 
 LLM_ENV_KEYS = [
@@ -53,6 +58,50 @@ def test_llm_config_is_configured() -> None:
     assert config.is_configured()
 
 
+def test_llm_config_is_configured_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    config = LLMConfig(provider="openai", api_key_env="OPENAI_API_KEY")
+    assert config.is_configured()
+
+
+def test_resolve_max_tokens_auto_by_model() -> None:
+    deepseek_chat = LLMConfig(model="deepseek-chat", max_tokens=0)
+    deepseek_reasoner = LLMConfig(model="deepseek-reasoner", max_tokens=0)
+    explicit = LLMConfig(model="deepseek-chat", max_tokens=2048)
+
+    assert deepseek_chat.is_max_tokens_auto() is True
+    assert deepseek_chat.resolve_max_tokens() is None
+    assert deepseek_reasoner.resolve_max_tokens() is None
+    assert explicit.is_max_tokens_auto() is False
+    assert explicit.resolve_max_tokens() == 2048
+
+
+def test_negative_max_tokens_resets_to_auto(
+    isolated_workspace: Path,
+    clean_llm_env: None,
+) -> None:
+    local_config_path = isolated_workspace / "config.json"
+    local_config_path.write_text(
+        json.dumps(
+            {
+                "llm": {
+                    "provider": "openai",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "model": "gpt-4o-mini",
+                    "max_tokens": -1,
+                },
+                "mcp_servers": [],
+                "theme": "dark",
+            }
+        ),
+        encoding="utf-8",
+    )
+    manager = create_manager(isolated_workspace)
+    config = manager.load_config()
+    assert config.llm.max_tokens == 0
+    assert config.llm.resolve_max_tokens() is None
+
+
 def test_mcp_config_model_fields() -> None:
     config = MCPConfig(name="test-server", command="python", args=["server.py"], enabled=True)
     assert config.name == "test-server"
@@ -69,6 +118,7 @@ def test_load_default_config(isolated_workspace: Path, clean_llm_env: None) -> N
     assert config.llm.provider == "openai"
     assert config.llm.model == "gpt-4o-mini"
     assert config.llm.api_key == ""
+    assert config.llm.max_tokens == 0
 
 
 def test_local_config_file_has_priority(
@@ -103,13 +153,84 @@ def test_local_config_file_has_priority(
     assert config.llm.api_key == "from-local-file"
 
 
-def test_save_and_load_config_round_trip(isolated_workspace: Path, clean_llm_env: None) -> None:
+def test_load_legacy_deepseek_max_tokens_defaults_to_auto(
+    isolated_workspace: Path,
+    clean_llm_env: None,
+) -> None:
+    local_config_path = isolated_workspace / "config.json"
+    local_config_path.write_text(
+        json.dumps(
+            {
+                "llm": {
+                    "provider": "openai",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "base_url": "https://api.deepseek.com",
+                    "model": "deepseek-chat",
+                    "temperature": 0.0,
+                    "max_tokens": 4096,
+                },
+                "mcp_servers": [],
+                "theme": "dark",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = create_manager(isolated_workspace)
+    config = manager.load_config()
+    assert config.llm.max_tokens == 0
+    assert config.llm.resolve_max_tokens() is None
+
+
+def test_load_plaintext_api_key_auto_scrubs_file(
+    isolated_workspace: Path,
+    clean_llm_env: None,
+) -> None:
+    local_config_path = isolated_workspace / "config.json"
+    local_config_path.write_text(
+        json.dumps(
+            {
+                "llm": {
+                    "provider": "openai",
+                    "api_key": "legacy-plaintext-key",
+                    "base_url": "",
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.3,
+                    "max_tokens": 2048,
+                },
+                "mcp_servers": [],
+                "theme": "dark",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = create_manager(isolated_workspace)
+    config = manager.load_config()
+    persisted = json.loads(local_config_path.read_text(encoding="utf-8"))
+
+    assert config.llm.api_key == "legacy-plaintext-key"
+    assert "api_key" not in persisted["llm"]
+    assert persisted["llm"]["api_key_env"] == "OPENAI_API_KEY"
+
+
+def test_save_and_load_config_round_trip(
+    isolated_workspace: Path,
+    clean_llm_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     manager = create_manager(isolated_workspace)
     config = AppConfig()
+    config.llm.provider = "openai"
     config.llm.api_key = "test-key"
     config.llm.model = "gpt-4"
 
     manager.save_config(config)
+    persisted = json.loads(manager.CONFIG_FILE.read_text(encoding="utf-8"))
+    assert "api_key" not in persisted["llm"]
+    assert persisted["llm"]["api_key_env"] == "OPENAI_API_KEY"
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     manager._config = None
 
     loaded = manager.load_config()

@@ -1,8 +1,6 @@
 """CLI interface for msagent."""
 
 import asyncio
-import json
-import sys
 from typing import Optional
 
 import typer
@@ -13,7 +11,11 @@ from rich.text import Text
 
 from .agent import Agent
 from .application import ChatApplicationService
-from .config import LLMConfig, MCPConfig, config_manager
+from .config import (
+    MCPConfig,
+    config_manager,
+    get_default_api_key_env,
+)
 from .tui import run_tui
 from .version import __version__
 
@@ -155,10 +157,25 @@ def config_command(
     show: bool = typer.Option(False, "--show", "-s", help="Show current configuration"),
     llm_provider: Optional[str] = typer.Option(None, "--llm-provider", help="LLM provider (openai/anthropic/gemini/custom)"),
     llm_api_key: Optional[str] = typer.Option(None, "--llm-api-key", help="LLM API key"),
+    llm_api_key_env: Optional[str] = typer.Option(
+        None,
+        "--llm-api-key-env",
+        help="Environment variable name used to resolve API key",
+    ),
+    llm_max_tokens: Optional[int] = typer.Option(
+        None,
+        "--llm-max-tokens",
+        help="Max output tokens (<=0 means auto by model)",
+    ),
     llm_base_url: Optional[str] = typer.Option(None, "--llm-base-url", help="Custom base URL"),
     llm_model: Optional[str] = typer.Option(None, "--llm-model", "-m", help="Model name"),
 ) -> None:
     """⚙️ Configure msAgent settings."""
+    if not isinstance(llm_api_key_env, str):
+        llm_api_key_env = None
+    if not isinstance(llm_max_tokens, int):
+        llm_max_tokens = None
+
     if show:
         # ... (omitted similar logic)
         config = config_manager.get_config()
@@ -168,11 +185,18 @@ def config_command(
         table.add_column("Value", style="green")
         
         table.add_row("LLM Provider", config.llm.provider)
-        table.add_row("API Key", "✓ Set" if config.llm.api_key else "✗ Not set")
+        table.add_row("API Key", "✓ Set" if config.llm.is_configured() else "✗ Not set")
+        table.add_row("API Key Env", config.llm.api_key_env or get_default_api_key_env(config.llm.provider) or "Not configured")
         table.add_row("Base URL", config.llm.base_url or "Default")
         table.add_row("Model", config.llm.model)
         table.add_row("Temperature", str(config.llm.temperature))
-        table.add_row("Max Tokens", str(config.llm.max_tokens))
+        resolved_max_tokens = config.llm.resolve_max_tokens()
+        max_tokens_display = (
+            "Auto (provider/model default)"
+            if config.llm.is_max_tokens_auto()
+            else str(config.llm.max_tokens)
+        )
+        table.add_row("Max Tokens", max_tokens_display)
         table.add_row("Theme", config.theme)
         table.add_row("MCP Servers", str(len(config.mcp_servers)))
         
@@ -195,18 +219,39 @@ def config_command(
     
     # Update configuration
     config = config_manager.get_config()
+    security_hints: list[str] = []
+    model_changed = False
     
     if llm_provider:
         config.llm.provider = llm_provider
+    if llm_api_key_env:
+        config.llm.api_key_env = llm_api_key_env.strip()
     if llm_api_key:
-        config.llm.api_key = llm_api_key
+        config.llm.api_key = llm_api_key.strip()
+        if not config.llm.api_key_env:
+            default_api_key_env = get_default_api_key_env(config.llm.provider)
+            if default_api_key_env:
+                config.llm.api_key_env = default_api_key_env
+        if config.llm.api_key_env:
+            security_hints.append(
+                f"API Key 不会写入配置文件，请在环境变量 {config.llm.api_key_env} 中维护密钥。"
+            )
     if llm_base_url:
         config.llm.base_url = llm_base_url
     if llm_model:
-        config.llm.model = llm_model
+        next_model = llm_model.strip()
+        if next_model:
+            model_changed = next_model != config.llm.model
+            config.llm.model = next_model
+    if llm_max_tokens is not None:
+        config.llm.max_tokens = max(0, llm_max_tokens)
+    elif model_changed:
+        config.llm.max_tokens = 0
     
     config_manager.save_config(config)
     console.print("[green]✓ Configuration saved successfully![/green]")
+    for hint in security_hints:
+        console.print(f"[yellow]⚠ {hint}[/yellow]")
 
 
 @app.command(name="mcp")
@@ -325,6 +370,7 @@ def info_command() -> None:
 
 [bold]Configuration:[/bold]
   Config file: ~/.config/msagent/config.json
+  (API keys are not stored in this file)
   
   Environment variables:
     • OPENAI_API_KEY / OPENAI_MODEL

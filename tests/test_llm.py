@@ -156,3 +156,26 @@ def test_client_uses_workspace_root_for_filesystem_backend(monkeypatch: pytest.M
 
     assert isinstance(client._backend, FilesystemBackend)
     assert client._backend.cwd == workspace_root.resolve()
+
+
+def test_build_model_uses_resolved_max_tokens_for_auto_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_chat_openai(**kwargs: Any):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(llm_module, "ChatOpenAI", _fake_chat_openai)
+
+    DeepAgentsClient(
+        LLMConfig(
+            provider="openai",
+            api_key="k",
+            model="deepseek-chat",
+            max_tokens=0,
+        )
+    )
+
+    assert "max_completion_tokens" not in captured

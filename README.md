@@ -50,7 +50,8 @@ msagent --version
 推荐先用 OpenAI：
 
 ```bash
-msagent config --llm-provider openai --llm-api-key "your-key" --llm-model "gpt-4o-mini"
+export OPENAI_API_KEY="your-key"
+msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
 检查配置是否生效：
@@ -126,27 +127,36 @@ uv run msagent chat --tui
 OpenAI:
 
 ```bash
-msagent config --llm-provider openai --llm-api-key "your-key" --llm-model "gpt-4o-mini"
+export OPENAI_API_KEY="your-key"
+msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
 Anthropic:
 
 ```bash
-msagent config --llm-provider anthropic --llm-api-key "your-key" --llm-model "claude-3-5-sonnet-20241022"
+export ANTHROPIC_API_KEY="your-key"
+msagent config --llm-provider anthropic --llm-api-key-env ANTHROPIC_API_KEY --llm-model "claude-3-5-sonnet-20241022"
 ```
 
 Gemini:
 
 ```bash
-msagent config --llm-provider gemini --llm-api-key "your-key" --llm-model "gemini-2.0-flash"
+export GEMINI_API_KEY="your-key"
+msagent config --llm-provider gemini --llm-api-key-env GEMINI_API_KEY --llm-model "gemini-2.0-flash"
 ```
 
 说明：OpenAI 兼容接口与 OpenAI Provider 共用 `openai`（通过 `--llm-base-url` 指向兼容服务）。
 
+`max_tokens` 默认建议使用自动模式（`0`）：
+- 自动模式不会向模型显式传 `max_tokens`，由服务端按模型默认值控制（最省维护）
+- 适配新模型时无需更新本地“模型参数表”
+- 如需手动覆盖，可用 `--llm-max-tokens <value>`
+
 OpenAI 兼容接口（自定义 Base URL）：
 
 ```bash
-msagent config --llm-provider openai --llm-api-key "your-key" --llm-base-url "http://127.0.0.1:8045/v1" --llm-model "your-model-name"
+export OPENAI_API_KEY="your-key"
+msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-base-url "https://api.deepseek.com" --llm-model "deepseek-chat" --llm-max-tokens 0
 ```
 
 ### 🔌 MCP 服务器管理
@@ -168,6 +178,7 @@ msagent mcp remove --name filesystem
 
 - 优先读取当前工作目录：`config.json`
 - 若不存在，则读取：`~/.config/msagent/config.json`
+- 安全策略：配置文件仅保存 `api_key_env`，不会保存明文 API Key
 
 ### 🧠 Skills
 

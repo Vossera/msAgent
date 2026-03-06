@@ -69,7 +69,7 @@ class Agent(AgentBackend):
                 self._error_message = (
                     "⚠️ LLM not configured. Please set up your API key:\n"
                     "   • Environment: OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY\n"
-                    "   • Config file: ~/.config/msagent/config.json\n"
+                    "   • Config file stores only api_key_env (not the secret itself)\n"
                     "   • Use: msagent config --help"
                 )
                 return False
