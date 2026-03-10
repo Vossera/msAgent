@@ -384,7 +384,7 @@ def info_command() -> None:
 [bold]Quick Start:[/bold]
   1. Set your API key:
        Linux / macOS -> export OPENAI_API_KEY="your-key"
-       Windows PowerShell -> $env:OPENAI_API_KEY = "your-key"
+       Windows CMD -> set OPENAI_API_KEY=your-key
   2. Start chatting: msagent chat
   3. Or use TUI: msagent chat --tui
 

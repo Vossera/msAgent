@@ -35,7 +35,7 @@
 
 说明：
 - 下文中 Linux / macOS 默认使用 `bash` / `zsh`
-- Windows 示例默认使用 PowerShell；若你使用 Git Bash / WSL，可直接复用 Linux / macOS 命令
+- Windows 示例默认使用 CMD（命令提示符）；若你使用 PowerShell，可将 `set KEY=value` 改为 `$env:KEY = "value"`；若你使用 Git Bash / WSL，可直接复用 Linux / macOS 命令
 
 ### 2) 📦 安装（推荐：PyPI）
 
@@ -60,10 +60,10 @@ export OPENAI_API_KEY="your-key"
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
-$env:OPENAI_API_KEY = "your-key"
+```cmd
+set OPENAI_API_KEY=your-key
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
@@ -99,7 +99,7 @@ Windows：
 
 如需调试或二次开发，再使用源码方式：
 
-以下命令在 Linux / macOS / Windows（PowerShell）一致：
+以下命令在 Linux / macOS / Windows（CMD）一致：
 
 ```bash
 git clone --recurse-submodules https://github.com/kali20gakki/msAgent.git
@@ -163,10 +163,10 @@ export OPENAI_API_KEY="your-key"
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
-$env:OPENAI_API_KEY = "your-key"
+```cmd
+set OPENAI_API_KEY=your-key
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-model "gpt-4o-mini"
 ```
 
@@ -179,10 +179,10 @@ export ANTHROPIC_API_KEY="your-key"
 msagent config --llm-provider anthropic --llm-api-key-env ANTHROPIC_API_KEY --llm-model "claude-3-5-sonnet-20241022"
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
-$env:ANTHROPIC_API_KEY = "your-key"
+```cmd
+set ANTHROPIC_API_KEY=your-key
 msagent config --llm-provider anthropic --llm-api-key-env ANTHROPIC_API_KEY --llm-model "claude-3-5-sonnet-20241022"
 ```
 
@@ -195,10 +195,10 @@ export GEMINI_API_KEY="your-key"
 msagent config --llm-provider gemini --llm-api-key-env GEMINI_API_KEY --llm-model "gemini-2.0-flash"
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
-$env:GEMINI_API_KEY = "your-key"
+```cmd
+set GEMINI_API_KEY=your-key
 msagent config --llm-provider gemini --llm-api-key-env GEMINI_API_KEY --llm-model "gemini-2.0-flash"
 ```
 
@@ -218,10 +218,10 @@ export OPENAI_API_KEY="your-key"
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-base-url "https://api.deepseek.com" --llm-model "deepseek-chat" --llm-max-tokens 0
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
-$env:OPENAI_API_KEY = "your-key"
+```cmd
+set OPENAI_API_KEY=your-key
 msagent config --llm-provider openai --llm-api-key-env OPENAI_API_KEY --llm-base-url "https://api.deepseek.com" --llm-model "deepseek-chat" --llm-max-tokens 0
 ```
 
@@ -242,7 +242,7 @@ msagent mcp remove --name filesystem
 
 `filesystem` 示例路径：
 - Linux / macOS：`msagent mcp add --name filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,/path/to/workspace"`
-- Windows（PowerShell）：`msagent mcp add --name filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,C:\path\to\workspace"`
+- Windows（CMD）：`msagent mcp add --name filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,C:\path\to\workspace"`
 
 ### 📁 配置文件位置
 
@@ -276,9 +276,9 @@ Linux / macOS：
 bash scripts/build_whl.sh
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
+```cmd
 git submodule update --init --recursive --force --depth 1 skills
 uv build --wheel --out-dir dist .
 ```
@@ -295,9 +295,9 @@ Linux / macOS：
 pip install dist/mindstudio_agent-<version>-py3-none-any.whl
 ```
 
-Windows（PowerShell）：
+Windows（CMD）：
 
-```powershell
+```cmd
 pip install .\dist\mindstudio_agent-<version>-py3-none-any.whl
 ```
 
