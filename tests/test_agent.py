@@ -48,8 +48,11 @@ class FakeLLMClient:
     def __init__(self) -> None:
         self.chat_response = "assistant-response"
         self.stream_chunks = ["chunk-1", "chunk-2"]
+        self.stream_events: list[dict[str, Any]] | None = None
+        self.chat_calls = 0
 
     async def chat(self, messages: list[Any], tools: list[dict] | None = None) -> str:
+        self.chat_calls += 1
         return self.chat_response
 
     async def chat_stream(self, messages: list[Any], tools: list[dict] | None = None):
@@ -58,6 +61,11 @@ class FakeLLMClient:
             await asyncio.sleep(0)
 
     async def chat_stream_events(self, messages: list[Any], tools: list[dict] | None = None):
+        if self.stream_events is not None:
+            for event in self.stream_events:
+                yield event
+                await asyncio.sleep(0)
+            return
         for chunk in self.stream_chunks:
             yield {"type": "text", "content": chunk}
             await asyncio.sleep(0)
@@ -281,6 +289,41 @@ async def test_chat_stream_with_tools_yields_chunks(
     assert "".join(chunks[:2]) == "one two"
     assert agent.messages[-1].role == "assistant"
     assert agent.messages[-1].content == "one two"
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_events_does_not_fallback_after_tool_only_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_mcp = FakeMCPManager()
+    fake_mcp.tools = [
+        {"type": "function", "function": {"name": "msprof-mcp__msprof_analyze_advisor"}}
+    ]
+    fake_llm = FakeLLMClient()
+    fake_llm.stream_events = [
+        {
+            "type": "tool_start",
+            "name": "msprof-mcp__msprof_analyze_advisor",
+            "input": {"mode": "all"},
+        },
+        {
+            "type": "tool_end",
+            "name": "msprof-mcp__msprof_analyze_advisor",
+            "output": "tool-output",
+        },
+    ]
+    monkeypatch.setattr(agent_module, "mcp_manager", fake_mcp)
+
+    agent = Agent(make_config())
+    agent._initialized = True
+    agent.llm_client = fake_llm
+
+    events = [event async for event in agent.stream_chat_events("run advisor")]
+
+    assert [event.type for event in events] == ["tool_call", "tool_result", "done"]
+    assert fake_llm.chat_calls == 0
+    assert [message.role for message in agent.messages] == ["user"]
+    assert [message.content for message in agent.messages] == ["run advisor"]
 
 
 def test_clear_history_and_get_history_copy() -> None:

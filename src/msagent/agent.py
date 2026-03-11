@@ -230,6 +230,7 @@ class Agent(AgentBackend):
         start = time.monotonic()
         full_response = ""
         stream = None
+        saw_tool_event = False
 
         try:
             stream = self.llm_client.chat_stream_events(
@@ -271,6 +272,7 @@ class Agent(AgentBackend):
                 if event_type == "tool_start":
                     tool_name = chunk.get("name")
                     if isinstance(tool_name, str) and tool_name:
+                        saw_tool_event = True
                         tool_input = chunk.get("input")
                         split = self._split_tool_name(tool_name)
                         yield AgentEvent(
@@ -285,6 +287,7 @@ class Agent(AgentBackend):
                 if event_type == "tool_end":
                     tool_name = chunk.get("name")
                     if isinstance(tool_name, str) and tool_name:
+                        saw_tool_event = True
                         split = self._split_tool_name(tool_name)
                         yield AgentEvent(
                             type="tool_result",
@@ -296,6 +299,11 @@ class Agent(AgentBackend):
                     continue
 
             if not full_response:
+                if saw_tool_event:
+                    dt = time.monotonic() - start
+                    yield AgentEvent(type="done", duration_s=dt)
+                    return
+
                 fallback = await asyncio.wait_for(
                     self.llm_client.chat(all_messages, tools=tools if tools else None),
                     timeout=timeout_s,
@@ -317,7 +325,8 @@ class Agent(AgentBackend):
                     return
 
             dt = time.monotonic() - start
-            self.messages.append(Message("assistant", full_response))
+            if full_response:
+                self.messages.append(Message("assistant", full_response))
             yield AgentEvent(type="done", duration_s=dt)
         except asyncio.CancelledError:
             try:

@@ -122,6 +122,9 @@ class DeepAgentsClient:
         agent = self._get_agent(system_prompt, tools or [])
         self.last_usage = None
         got_chunk = False
+        saw_tool_event = False
+        final_text: str | None = None
+        declared_tool_names = self._extract_declared_tool_names(tools or [])
 
         async for event in agent.astream_events(
             {"messages": input_messages},
@@ -134,6 +137,9 @@ class DeepAgentsClient:
                 yield {"type": "usage", "usage": usage}
 
             event_name = event.get("event")
+            if final_text is None and event_name not in {"on_tool_start", "on_tool_end"}:
+                final_text = self._extract_assistant_content_from_event(event)
+
             if event_name == "on_chat_model_stream":
                 data = event.get("data", {})
                 chunk = data.get("chunk")
@@ -146,6 +152,9 @@ class DeepAgentsClient:
             if event_name == "on_tool_start":
                 data = event.get("data", {})
                 tool_name = event.get("name") or data.get("name") or "unknown_tool"
+                if not self._should_emit_tool_event(str(tool_name), declared_tool_names):
+                    continue
+                saw_tool_event = True
                 tool_input = data.get("input")
                 yield {
                     "type": "tool_start",
@@ -157,6 +166,9 @@ class DeepAgentsClient:
             if event_name == "on_tool_end":
                 data = event.get("data", {})
                 tool_name = event.get("name") or data.get("name") or "unknown_tool"
+                if not self._should_emit_tool_event(str(tool_name), declared_tool_names):
+                    continue
+                saw_tool_event = True
                 yield {
                     "type": "tool_end",
                     "name": str(tool_name),
@@ -165,6 +177,13 @@ class DeepAgentsClient:
                 continue
 
         if not got_chunk:
+            if final_text:
+                yield {"type": "text", "content": final_text}
+                return
+
+            if saw_tool_event:
+                return
+
             # Fallback: if streaming path returns no token events, return one-shot output.
             text = await self.chat(messages, tools)
             if text:
@@ -299,10 +318,13 @@ class DeepAgentsClient:
     def _extract_assistant_content(self, result: Any) -> str | None:
         if isinstance(result, str):
             return result
-        if not isinstance(result, dict):
-            return None
-
-        messages = result.get("messages")
+        messages: Any = None
+        if isinstance(result, list):
+            messages = result
+        elif isinstance(result, dict):
+            messages = result.get("messages")
+        else:
+            messages = getattr(result, "messages", None)
         if not isinstance(messages, list):
             return None
 
@@ -341,6 +363,40 @@ class DeepAgentsClient:
                         parts.append(text)
             return "".join(parts) if parts else None
 
+        return None
+
+    def _extract_declared_tool_names(self, tools: list[dict[str, Any]]) -> set[str]:
+        names: set[str] = set()
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function = tool.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            if isinstance(name, str) and name:
+                names.add(name)
+        return names
+
+    def _should_emit_tool_event(
+        self, tool_name: str, declared_tool_names: set[str]
+    ) -> bool:
+        if not tool_name:
+            return False
+        if not declared_tool_names:
+            return True
+        return tool_name in declared_tool_names
+
+    def _extract_assistant_content_from_event(self, event: dict[str, Any]) -> str | None:
+        if not isinstance(event, dict):
+            return None
+        data = event.get("data")
+        if not isinstance(data, dict):
+            return None
+        for key in ("output", "result"):
+            content = self._extract_assistant_content(data.get(key))
+            if content:
+                return content
         return None
 
     def _extract_usage_from_result(self, result: Any) -> dict[str, int] | None:

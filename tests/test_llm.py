@@ -17,8 +17,10 @@ class FakeAgent:
     def __init__(self, result: Any, events: list[dict[str, Any]] | None = None) -> None:
         self.result = result
         self.events = events or []
+        self.ainvoke_calls = 0
 
     async def ainvoke(self, _payload: dict[str, Any], **_kwargs: Any) -> Any:
+        self.ainvoke_calls += 1
         return self.result
 
     async def astream_events(
@@ -110,6 +112,120 @@ async def test_chat_stream_fallbacks_to_chat_when_no_events(monkeypatch: pytest.
     chunks = [c async for c in client.chat_stream([Message("user", "hi")], tools=[])]
 
     assert "".join(chunks) == "fallback-text"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_events_filters_nested_tool_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_model_build(monkeypatch)
+    fake_agent = FakeAgent(
+        result={"messages": [{"role": "assistant", "content": "should-not-fallback"}]},
+        events=[
+            {
+                "event": "on_tool_start",
+                "name": "msprof-mcp__msprof_analyze_advisor",
+                "data": {"input": {"mode": "all"}},
+            },
+            {
+                "event": "on_tool_start",
+                "name": "msprof_analyze_advisor",
+                "data": {"input": {"mode": "all"}},
+            },
+            {
+                "event": "on_tool_end",
+                "name": "msprof_analyze_advisor",
+                "data": {"output": "nested-output"},
+            },
+            {
+                "event": "on_tool_end",
+                "name": "msprof-mcp__msprof_analyze_advisor",
+                "data": {"output": "tool-output"},
+            },
+            {
+                "event": "on_chain_end",
+                "data": {
+                    "output": {
+                        "messages": [{"role": "assistant", "content": "final-from-event"}]
+                    }
+                },
+            },
+        ],
+    )
+    monkeypatch.setattr(llm_module, "create_deep_agent", lambda **_kwargs: fake_agent)
+
+    client = DeepAgentsClient(LLMConfig(provider="openai", api_key="k", model="m"))
+    events = [
+        event
+        async for event in client.chat_stream_events(
+            [Message("user", "hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "msprof-mcp__msprof_analyze_advisor"},
+                }
+            ],
+        )
+    ]
+
+    tool_starts = [event for event in events if event.get("type") == "tool_start"]
+    tool_ends = [event for event in events if event.get("type") == "tool_end"]
+    text_events = [event for event in events if event.get("type") == "text"]
+
+    assert tool_starts == [
+        {
+            "type": "tool_start",
+            "name": "msprof-mcp__msprof_analyze_advisor",
+            "input": {"mode": "all"},
+        }
+    ]
+    assert tool_ends == [
+        {
+            "type": "tool_end",
+            "name": "msprof-mcp__msprof_analyze_advisor",
+            "output": "tool-output",
+        }
+    ]
+    assert text_events == [{"type": "text", "content": "final-from-event"}]
+    assert fake_agent.ainvoke_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_events_does_not_fallback_after_tool_only_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_model_build(monkeypatch)
+    fake_agent = FakeAgent(
+        result={"messages": [{"role": "assistant", "content": "should-not-run"}]},
+        events=[
+            {
+                "event": "on_tool_start",
+                "name": "msprof-mcp__msprof_analyze_advisor",
+                "data": {"input": {"mode": "all"}},
+            },
+            {
+                "event": "on_tool_end",
+                "name": "msprof-mcp__msprof_analyze_advisor",
+                "data": {"output": "tool-output"},
+            },
+        ],
+    )
+    monkeypatch.setattr(llm_module, "create_deep_agent", lambda **_kwargs: fake_agent)
+
+    client = DeepAgentsClient(LLMConfig(provider="openai", api_key="k", model="m"))
+    events = [
+        event
+        async for event in client.chat_stream_events(
+            [Message("user", "hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "msprof-mcp__msprof_analyze_advisor"},
+                }
+            ],
+        )
+    ]
+
+    assert [event["type"] for event in events] == ["tool_start", "tool_end"]
+    assert fake_agent.ainvoke_calls == 0
 
 
 @pytest.mark.asyncio
