@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import msagent.llm as llm_module
+from deepagents.backends import LocalShellBackend
 from deepagents.backends.filesystem import FilesystemBackend
 from msagent.config import LLMConfig
 from msagent.llm import DeepAgentsClient, Message, create_llm_client
@@ -308,6 +309,68 @@ def test_client_uses_workspace_root_for_filesystem_backend(monkeypatch: pytest.M
 
     assert isinstance(client._backend, FilesystemBackend)
     assert client._backend.cwd == workspace_root.resolve()
+
+
+def test_client_can_use_local_shell_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_model_build(monkeypatch)
+    workspace_root = Path("/tmp/msagent-workspace")
+
+    client = DeepAgentsClient(
+        LLMConfig(provider="openai", api_key="k", model="m"),
+        workspace_root=workspace_root,
+        backend_mode="local_shell",
+    )
+
+    assert isinstance(client._backend, LocalShellBackend)
+    assert client._backend.cwd == workspace_root.resolve()
+
+
+def test_local_shell_backend_uses_minimal_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_model_build(monkeypatch)
+    monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin")
+    monkeypatch.setenv("HOME", "/Users/tester")
+
+    client = DeepAgentsClient(
+        LLMConfig(provider="openai", api_key="k", model="m"),
+        backend_mode="local_shell",
+    )
+
+    assert isinstance(client._backend, LocalShellBackend)
+    assert client._backend._env["PATH"] == "/usr/local/bin:/usr/bin"
+    assert client._backend._env["HOME"] == "/Users/tester"
+    assert client._backend._env["PYTHONIOENCODING"] == "utf-8"
+    assert "OPENAI_API_KEY" not in client._backend._env
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_events_emits_builtin_execute_tool_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_model_build(monkeypatch)
+    fake_agent = FakeAgent(
+        result={"messages": [{"role": "assistant", "content": "done"}]},
+        events=[
+            {
+                "event": "on_tool_start",
+                "name": "execute",
+                "data": {"input": {"command": "pwd"}},
+            },
+            {
+                "event": "on_tool_end",
+                "name": "execute",
+                "data": {"output": "ok"},
+            },
+        ],
+    )
+    monkeypatch.setattr(llm_module, "create_deep_agent", lambda **_kwargs: fake_agent)
+
+    client = DeepAgentsClient(LLMConfig(provider="openai", api_key="k", model="m"))
+    events = [event async for event in client.chat_stream_events([Message("user", "run")])]
+
+    assert events == [
+        {"type": "tool_start", "name": "execute", "input": {"command": "pwd"}},
+        {"type": "tool_end", "name": "execute", "output": "ok"},
+    ]
 
 
 def test_build_model_uses_resolved_max_tokens_for_auto_mode(

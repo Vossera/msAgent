@@ -111,6 +111,11 @@ def chat_command(
                                 "[bold]Available Commands:[/bold]\n"
                                 "  [cyan]/help[/cyan]  - Show this help message\n"
                                 "  [cyan]/clear[/cyan] - Clear chat history\n"
+                                "  [cyan]/new[/cyan]   - Start a new session\n"
+                                "  [cyan]/backend status[/cyan]      - Show current deepagents backend\n"
+                                "  [cyan]/backend filesystem[/cyan]  - Switch to FilesystemBackend\n"
+                                "  [cyan]/backend local_shell[/cyan] - Switch to LocalShellBackend (high risk)\n"
+                                "  [cyan]/shell on[/cyan] / [cyan]/shell off[/cyan] - Shortcut for backend switching\n"
                                 "  [cyan]/exit[/cyan]  - Exit the chat\n",
                                 title="Help",
                                 border_style="blue"
@@ -127,6 +132,12 @@ def chat_command(
                         if intent.type == "new_session":
                             session_num = service.start_new_session()
                             console.print(f"[dim]Started new session #{session_num}.[/dim]")
+                            continue
+                        if intent.type == "backend_status":
+                            console.print(service.get_status_message())
+                            continue
+                        if intent.type == "backend_switch":
+                            console.print(service.switch_deepagents_backend(intent.message))
                             continue
                         if intent.type != "chat":
                             continue

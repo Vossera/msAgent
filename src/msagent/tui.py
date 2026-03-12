@@ -717,7 +717,7 @@ class InputArea(Container):
         with Horizontal(classes="input-row"):
             yield Label(">", classes="prompt-label")
             yield Input(
-                placeholder="向msAgent提问（@ 引用文件，/ 命令补全）",
+                placeholder="向msAgent提问（@ 引用文件，/ 命令补全，如 /backend）",
                 id="message-input",
             )
             yield SendButton("发送", id="send-btn")
@@ -972,6 +972,16 @@ class ChatScreen(Screen):
             return
         if intent.type == "new_session":
             self.action_new_session()
+            input_widget.value = ""
+            return
+        if intent.type == "backend_status":
+            self._handle_backend_command(self.app.service.get_status_message())
+            input_widget.value = ""
+            return
+        if intent.type == "backend_switch":
+            self._handle_backend_command(
+                self.app.service.switch_deepagents_backend(intent.message)
+            )
             input_widget.value = ""
             return
         if intent.type != "chat":
@@ -1246,7 +1256,9 @@ class ChatScreen(Screen):
         footer = self._query_footer()
         if footer is None:
             return
-        footer.set_model_status(f"模型: {status.provider}/{status.model}")
+        footer.set_model_status(
+            f"模型: {status.provider}/{status.model} [{status.backend_mode}]"
+        )
 
     def _update_footer_session(self) -> None:
         footer = self._query_footer()
@@ -1271,6 +1283,13 @@ class ChatScreen(Screen):
 
     def _get_status(self) -> AgentStatus:
         return self.app.service.get_status()
+
+    def _handle_backend_command(self, message: str) -> None:
+        self._update_footer_model()
+        self._update_footer_context()
+        self._update_footer_tokens()
+        chat_area = self.query_one("#chat-area", ChatArea)
+        chat_area.run_worker(self._add_system_message(chat_area, message))
 
     def _mount_welcome_banner(self, chat_area: ChatArea, status: AgentStatus) -> None:
         chat_area.mount(

@@ -1,11 +1,13 @@
 """LLM client for msagent (deepagents-based)."""
 
 import json
+import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from deepagents.backends import LocalShellBackend
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents import create_deep_agent
 from langchain_anthropic import ChatAnthropic
@@ -16,6 +18,19 @@ from pydantic import create_model
 
 from .config import LLMConfig
 from .mcp_client import mcp_manager
+
+
+_DEEPAGENTS_BUILTIN_TOOL_NAMES = {
+    "write_todos",
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "execute",
+    "task",
+}
 
 
 def _resolve_openai_base_url(base_url: str) -> tuple[str, bool]:
@@ -77,6 +92,7 @@ class DeepAgentsClient:
         recursion_limit: int = 80,
         workspace_root: str | Path | None = None,
         tool_invoker: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
+        backend_mode: str = "filesystem",
     ):
         self.config = config
         self.last_usage: dict[str, Any] | None = None
@@ -91,10 +107,8 @@ class DeepAgentsClient:
             else Path.cwd().resolve()
         )
         self._tool_invoker = tool_invoker or mcp_manager.call_tool
-        self._backend = FilesystemBackend(
-            root_dir=self._workspace_root,
-            virtual_mode=False,
-        )
+        self._backend_mode = backend_mode.strip().lower() or "filesystem"
+        self._backend = self._build_backend()
 
     async def chat(self, messages: list[Message], tools: list[dict] | None = None) -> str:
         system_prompt, input_messages = self._split_messages(messages)
@@ -265,6 +279,38 @@ class DeepAgentsClient:
 
         raise ValueError(f"Unsupported provider: {config.provider}")
 
+    def _build_backend(self):
+        if self._backend_mode == "filesystem":
+            return FilesystemBackend(
+                root_dir=self._workspace_root,
+                virtual_mode=False,
+            )
+
+        if self._backend_mode == "local_shell":
+            return LocalShellBackend(
+                root_dir=self._workspace_root,
+                virtual_mode=False,
+                timeout=_read_positive_int_env("MSAGENT_LOCAL_SHELL_TIMEOUT", 120),
+                max_output_bytes=_read_positive_int_env(
+                    "MSAGENT_LOCAL_SHELL_MAX_OUTPUT_BYTES", 100_000
+                ),
+                env=self._build_local_shell_env(),
+                inherit_env=False,
+            )
+
+        raise ValueError(f"Unsupported deepagents backend mode: {self._backend_mode}")
+
+    def _build_local_shell_env(self) -> dict[str, str]:
+        shell_env: dict[str, str] = {
+            "PATH": os.getenv("PATH", "/usr/bin:/bin"),
+            "PYTHONIOENCODING": "utf-8",
+        }
+        for key in ("HOME", "LANG", "LC_ALL", "SHELL", "TERM", "USER"):
+            value = os.getenv(key)
+            if value:
+                shell_env[key] = value
+        return shell_env
+
     def _split_messages(self, messages: list[Message]) -> tuple[str, list[dict[str, Any]]]:
         system_parts = [m.content for m in messages if m.role == "system"]
         system_prompt = "\n\n".join(system_parts)
@@ -371,7 +417,7 @@ class DeepAgentsClient:
         return None
 
     def _extract_declared_tool_names(self, tools: list[dict[str, Any]]) -> set[str]:
-        names: set[str] = set()
+        names: set[str] = set(_DEEPAGENTS_BUILTIN_TOOL_NAMES)
         for tool in tools:
             if not isinstance(tool, dict):
                 continue
@@ -513,6 +559,7 @@ def create_llm_client(
     recursion_limit: int = 80,
     workspace_root: str | Path | None = None,
     tool_invoker: Callable[[str, dict[str, Any]], Awaitable[str]] | None = None,
+    backend_mode: str = "filesystem",
 ) -> DeepAgentsClient:
     """Factory function to create deepagents client."""
     return DeepAgentsClient(
@@ -522,4 +569,16 @@ def create_llm_client(
         recursion_limit=recursion_limit,
         workspace_root=workspace_root,
         tool_invoker=tool_invoker,
+        backend_mode=backend_mode,
     )
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default

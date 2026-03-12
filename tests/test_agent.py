@@ -105,7 +105,8 @@ async def test_initialize_loads_only_enabled_mcp_servers(monkeypatch: pytest.Mon
         memory=None,
         recursion_limit=80,
         workspace_root=None,
-        tool_invoker=None: fake_llm,
+        tool_invoker=None,
+        backend_mode="filesystem": fake_llm,
     )
 
     config = make_config(
@@ -144,12 +145,14 @@ async def test_initialize_passes_deepagents_settings_to_llm_client(
         recursion_limit=80,
         workspace_root=None,
         tool_invoker=None,
+        backend_mode="filesystem",
     ):
         captured["skills"] = skills
         captured["memory"] = memory
         captured["recursion_limit"] = recursion_limit
         captured["workspace_root"] = workspace_root
         captured["tool_invoker"] = tool_invoker
+        captured["backend_mode"] = backend_mode
         return fake_llm
 
     monkeypatch.setattr(agent_module, "create_llm_client", _fake_create_llm_client)
@@ -171,6 +174,7 @@ async def test_initialize_passes_deepagents_settings_to_llm_client(
     assert captured["recursion_limit"] == config.deepagents.recursion_limit
     assert captured["workspace_root"] == tmp_path
     assert callable(captured["tool_invoker"])
+    assert captured["backend_mode"] == "filesystem"
 
 
 def test_resolve_skill_sources_includes_packaged_skills(
@@ -199,6 +203,19 @@ def test_get_system_prompt_includes_connected_servers(monkeypatch: pytest.Monkey
     assert "msAgent" in prompt
 
 
+def test_get_system_prompt_adds_local_shell_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_mcp = FakeMCPManager()
+    monkeypatch.setattr(agent_module, "mcp_manager", fake_mcp)
+
+    agent = Agent(make_config())
+    agent._deepagents_backend_mode = Agent._LOCAL_SHELL_MODE
+
+    prompt = agent.get_system_prompt()
+
+    assert "LocalShellBackend" in prompt
+    assert "execute" in prompt
+
+
 def test_get_status_returns_frontend_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_mcp = FakeMCPManager()
     fake_mcp.connected_servers = ["filesystem"]
@@ -220,6 +237,7 @@ def test_get_status_returns_frontend_snapshot(monkeypatch: pytest.MonkeyPatch) -
     status = agent.get_status()
 
     assert status.is_initialized is True
+    assert status.backend_mode == "filesystem"
     assert status.connected_servers == ("filesystem",)
     assert status.loaded_skills == ("code-review",)
     assert status.usage is not None
@@ -371,6 +389,86 @@ async def test_shutdown_disconnects_mcp_manager(monkeypatch: pytest.MonkeyPatch)
 
     assert fake_mcp.disconnect_called is True
     assert agent.is_initialized is False
+
+
+@pytest.mark.asyncio
+async def test_initialize_warns_when_local_shell_backend_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_mcp = FakeMCPManager()
+    fake_llm = FakeLLMClient()
+    monkeypatch.setattr(agent_module, "mcp_manager", fake_mcp)
+    monkeypatch.setenv("MSAGENT_ENABLE_LOCAL_SHELL", "1")
+    monkeypatch.setattr(
+        agent_module,
+        "create_llm_client",
+        lambda _cfg,
+        skills=None,
+        memory=None,
+        recursion_limit=80,
+        workspace_root=None,
+        tool_invoker=None,
+        backend_mode="filesystem": fake_llm,
+    )
+
+    agent = Agent(make_config(api_key="configured", mcp_servers=[]))
+
+    initialized = await agent.initialize()
+
+    captured = capsys.readouterr()
+    assert initialized is True
+    assert "LocalShellBackend" in captured.err
+    assert agent._deepagents_backend_mode == Agent._LOCAL_SHELL_MODE
+
+
+def test_switch_deepagents_backend_updates_mode_before_initialization() -> None:
+    agent = Agent(make_config())
+
+    message = agent.switch_deepagents_backend("local_shell")
+
+    assert agent.get_status().backend_mode == "local_shell"
+    assert "LocalShellBackend" in message
+
+
+@pytest.mark.asyncio
+async def test_switch_deepagents_backend_rebuilds_llm_client_when_initialized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = Agent(make_config(api_key="configured", mcp_servers=[]))
+    created_modes: list[str] = []
+
+    def _fake_create_llm_client(
+        _cfg,
+        skills=None,
+        memory=None,
+        recursion_limit=80,
+        workspace_root=None,
+        tool_invoker=None,
+        backend_mode="filesystem",
+    ):
+        created_modes.append(backend_mode)
+        return FakeLLMClient()
+
+    monkeypatch.setattr(agent_module, "create_llm_client", _fake_create_llm_client)
+    agent._initialized = True
+    agent._loaded_skill_sources = ["/skills/project/"]
+    agent.llm_client = FakeLLMClient()
+
+    message = agent.switch_deepagents_backend("local_shell")
+
+    assert created_modes == ["local_shell"]
+    assert agent.get_status().backend_mode == "local_shell"
+    assert "LocalShellBackend" in message
+
+
+def test_switch_deepagents_backend_rejects_invalid_mode() -> None:
+    agent = Agent(make_config())
+
+    message = agent.switch_deepagents_backend("unknown")
+
+    assert "不支持的 deepagents backend" in message
+    assert agent.get_status().backend_mode == "filesystem"
 
 
 def test_find_local_files_supports_partial_queries(

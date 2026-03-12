@@ -8,7 +8,15 @@ from typing import Literal
 
 from .interfaces import AgentBackend, AgentEvent, AgentStatus
 
-UserIntentType = Literal["chat", "clear", "new_session", "exit", "ignore"]
+UserIntentType = Literal[
+    "chat",
+    "clear",
+    "new_session",
+    "exit",
+    "ignore",
+    "backend_status",
+    "backend_switch",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +33,21 @@ class ChatApplicationService:
     _EXIT_COMMANDS = frozenset({"/exit"})
     _CLEAR_COMMANDS = frozenset({"/clear"})
     _NEW_SESSION_COMMANDS = frozenset({"/new"})
+    _BACKEND_STATUS_COMMANDS = frozenset({"/backend", "/backend status", "/shell", "/shell status"})
+    _BACKEND_SWITCH_MAP = {
+        "/backend filesystem": "filesystem",
+        "/backend local_shell": "local_shell",
+        "/shell on": "local_shell",
+        "/shell off": "filesystem",
+    }
     _COMMAND_HELP: tuple[tuple[str, str], ...] = (
         ("/new", "开启新会话并清空上下文"),
         ("/clear", "清空当前会话历史"),
+        ("/backend status", "查看当前 deepagents backend"),
+        ("/backend filesystem", "切换到 FilesystemBackend"),
+        ("/backend local_shell", "切换到 LocalShellBackend（高风险）"),
+        ("/shell on", "开启 LocalShellBackend（高风险）"),
+        ("/shell off", "关闭 LocalShellBackend"),
         ("/exit", "退出 msAgent"),
     )
 
@@ -47,6 +67,22 @@ class ChatApplicationService:
     def get_status(self) -> AgentStatus:
         return self._backend.get_status()
 
+    def get_status_message(self) -> str:
+        status = self._backend.get_status()
+        backend_mode = status.backend_mode
+        backend_name = (
+            "LocalShellBackend" if backend_mode == "local_shell" else "FilesystemBackend"
+        )
+        lines = [f"当前 deepagents backend：{backend_name} ({backend_mode})。"]
+        if backend_mode == "local_shell":
+            lines.append("⚠️ `execute` 会直接在当前机器上执行 shell 命令，没有沙箱隔离。")
+        else:
+            lines.append("当前未启用宿主机 shell 执行能力。")
+        lines.append(
+            "命令：/backend filesystem | /backend local_shell | /shell on | /shell off"
+        )
+        return "\n".join(lines)
+
     def resolve_user_input(self, raw_input: str) -> UserIntent:
         text = raw_input.strip()
         if not text:
@@ -59,6 +95,11 @@ class ChatApplicationService:
             return UserIntent("clear")
         if normalized in self._NEW_SESSION_COMMANDS:
             return UserIntent("new_session")
+        if normalized in self._BACKEND_STATUS_COMMANDS:
+            return UserIntent("backend_status")
+        backend_mode = self._BACKEND_SWITCH_MAP.get(normalized)
+        if backend_mode is not None:
+            return UserIntent("backend_switch", message=backend_mode)
         return UserIntent("chat", message=text)
 
     async def chat(self, user_input: str) -> str:
@@ -77,6 +118,9 @@ class ChatApplicationService:
 
     def start_new_session(self) -> int:
         return self._backend.start_new_session()
+
+    def switch_deepagents_backend(self, mode: str) -> str:
+        return self._backend.switch_deepagents_backend(mode)
 
     def find_local_files(self, query: str, limit: int = 8) -> list[str]:
         return self._backend.find_local_files(query, limit=limit)

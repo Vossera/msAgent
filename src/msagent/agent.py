@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import time
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -19,6 +20,29 @@ from .tools import create_tool_invoker
 class Agent(AgentBackend):
     """msagent - Core agent implementation."""
 
+    _LOCAL_SHELL_MODE = "local_shell"
+    _FILESYSTEM_MODE = "filesystem"
+    _SUPPORTED_BACKEND_MODES = (_FILESYSTEM_MODE, _LOCAL_SHELL_MODE)
+    _BACKEND_ENV = "MSAGENT_DEEPAGENTS_BACKEND"
+    _ENABLE_LOCAL_SHELL_ENV = "MSAGENT_ENABLE_LOCAL_SHELL"
+    _LOCAL_SHELL_WARNING = (
+        "⚠️ LocalShellBackend 已启用：msAgent 现在可以直接在当前机器上执行 shell 命令。\n"
+        "   - 该能力没有沙箱隔离，命令以当前用户权限在宿主机执行\n"
+        "   - 仅建议在受信任的本地开发环境使用\n"
+        "   - 不要在生产环境、多租户服务或不受信任输入场景启用\n"
+        "   - 如需关闭，请移除环境变量 "
+        "MSAGENT_DEEPAGENTS_BACKEND=local_shell / MSAGENT_ENABLE_LOCAL_SHELL=1\n"
+    )
+    _LOCAL_SHELL_PROMPT_WARNING = """
+[LocalShellBackend 安全约束]
+- 当前已启用 deepagents LocalShellBackend。`execute` 工具会直接在用户机器上执行 shell 命令，没有沙箱隔离。
+- 默认优先使用内置文件工具和已注册工具；只有在确实需要时才使用 `execute`。
+- 禁止主动读取敏感信息，如 `.env`、SSH key、云凭证、系统账户文件、用户主目录凭据等，除非用户明确要求。
+- 禁止执行破坏性或高风险命令，如 `rm -rf`、`sudo`、后台守护进程、批量删除、系统配置修改、包安装、网络下载/上传，除非用户明确要求并确认风险。
+- 涉及文件修改、依赖安装、进程管理、网络访问或跨工作区访问时，必须先向用户说明风险并获得明确确认。
+- 命令应尽量限制在当前工作区内，默认保持只读、最小化、可回滚。
+""".strip()
+
     def __init__(self, config: AppConfig | None = None):
         self.config = config or config_manager.get_config()
         self.llm_client = None
@@ -27,6 +51,7 @@ class Agent(AgentBackend):
         self._initialized = False
         self._error_message = ""
         self._workspace_root = Path.cwd().resolve()
+        self._deepagents_backend_mode = self._resolve_deepagents_backend_mode()
         self._tool_invoker = create_tool_invoker(self._workspace_root, mcp_manager)
         self._file_index_cache: tuple[float, list[str]] | None = None
         self._loaded_skill_sources: list[str] = []
@@ -77,16 +102,12 @@ class Agent(AgentBackend):
                 return False
 
             skill_sources = self._resolve_skill_sources()
-            self.llm_client = create_llm_client(
-                self.config.llm,
-                skills=skill_sources,
-                memory=self.config.deepagents.memory,
-                recursion_limit=self.config.deepagents.recursion_limit,
-                workspace_root=self._workspace_root,
-                tool_invoker=self._tool_invoker.call_tool,
-            )
+            self.llm_client = self._create_llm_client(skill_sources)
             self._loaded_skill_sources = skill_sources
             self._loaded_skills = self._discover_skills(skill_sources)
+
+            if self._uses_local_shell_backend():
+                print(self._LOCAL_SHELL_WARNING, file=sys.stderr, flush=True)
 
             for mcp_config in self.config.mcp_servers:
                 if mcp_config.enabled:
@@ -156,6 +177,7 @@ class Agent(AgentBackend):
             session_number=self._session_number,
             provider=(llm_cfg.provider or "unknown").strip(),
             model=(llm_cfg.model or "unknown").strip(),
+            backend_mode=self._deepagents_backend_mode,
             connected_servers=tuple(mcp_manager.get_connected_servers()),
             loaded_skills=tuple(self._loaded_skills),
             usage=self._build_usage_snapshot(),
@@ -166,7 +188,10 @@ class Agent(AgentBackend):
         mcp_servers = mcp_manager.get_connected_servers()
         server_text = ", ".join(mcp_servers) if mcp_servers else "None"
         template = self._load_system_prompt_template()
-        return template.replace("__MCP_SERVERS__", server_text)
+        prompt = template.replace("__MCP_SERVERS__", server_text)
+        if self._uses_local_shell_backend():
+            prompt = f"{prompt}\n\n{self._LOCAL_SHELL_PROMPT_WARNING}"
+        return prompt
 
     def _load_system_prompt_template(self) -> str:
         if self._system_prompt_template is not None:
@@ -175,6 +200,97 @@ class Agent(AgentBackend):
         template_path = Path(__file__).resolve().parent / self._SYSTEM_PROMPT_FILE
         self._system_prompt_template = template_path.read_text(encoding="utf-8").strip()
         return self._system_prompt_template
+
+    def _create_llm_client(self, skill_sources: list[str] | None = None):
+        resolved_skill_sources = skill_sources or self._resolve_skill_sources()
+        return create_llm_client(
+            self.config.llm,
+            skills=resolved_skill_sources,
+            memory=self.config.deepagents.memory,
+            recursion_limit=self.config.deepagents.recursion_limit,
+            workspace_root=self._workspace_root,
+            tool_invoker=self._tool_invoker.call_tool,
+            backend_mode=self._deepagents_backend_mode,
+        )
+
+    def _resolve_deepagents_backend_mode(self) -> str:
+        configured = (os.getenv(self._BACKEND_ENV, "") or "").strip().lower()
+        if configured in self._SUPPORTED_BACKEND_MODES:
+            return configured
+        if self._env_flag(self._ENABLE_LOCAL_SHELL_ENV):
+            return self._LOCAL_SHELL_MODE
+        return self._FILESYSTEM_MODE
+
+    def _uses_local_shell_backend(self) -> bool:
+        return self._deepagents_backend_mode == self._LOCAL_SHELL_MODE
+
+    def _env_flag(self, name: str) -> bool:
+        value = os.getenv(name, "").strip().lower()
+        return value in {"1", "true", "yes", "on"}
+
+    def switch_deepagents_backend(self, mode: str) -> str:
+        normalized = self._normalize_backend_mode(mode)
+        if normalized is None:
+            supported = ", ".join(self._SUPPORTED_BACKEND_MODES)
+            return (
+                f"❌ 不支持的 deepagents backend: {mode or '<empty>'}。\n"
+                f"可选值：{supported}\n"
+                "可用命令：/backend filesystem | /backend local_shell | /shell on | /shell off"
+            )
+
+        if normalized == self._deepagents_backend_mode:
+            return self._format_backend_status_message(
+                prefix="当前已启用",
+                include_command_hint=True,
+            )
+
+        previous_mode = self._deepagents_backend_mode
+        previous_client = self.llm_client
+        self._deepagents_backend_mode = normalized
+
+        if self._initialized:
+            try:
+                self.llm_client = self._create_llm_client(self._loaded_skill_sources)
+            except Exception as exc:
+                self._deepagents_backend_mode = previous_mode
+                self.llm_client = previous_client
+                return f"❌ 切换 deepagents backend 失败：{exc}"
+
+        return self._format_backend_status_message(
+            prefix="已切换当前会话的",
+            include_command_hint=True,
+        )
+
+    def _normalize_backend_mode(self, mode: str) -> str | None:
+        normalized = (mode or "").strip().lower()
+        if normalized in self._SUPPORTED_BACKEND_MODES:
+            return normalized
+        return None
+
+    def _backend_display_name(self, mode: str | None = None) -> str:
+        resolved = mode or self._deepagents_backend_mode
+        if resolved == self._LOCAL_SHELL_MODE:
+            return "LocalShellBackend"
+        return "FilesystemBackend"
+
+    def _format_backend_status_message(
+        self,
+        *,
+        prefix: str,
+        include_command_hint: bool = False,
+    ) -> str:
+        mode = self._deepagents_backend_mode
+        lines = [
+            f"{prefix} deepagents backend：{self._backend_display_name(mode)} ({mode})。"
+        ]
+        if mode == self._LOCAL_SHELL_MODE:
+            lines.append("⚠️ `execute` 将直接在当前机器上执行 shell 命令，没有沙箱隔离。")
+            lines.append("仅建议在受信任的本地开发环境中临时开启；请避免处理不受信任输入。")
+        else:
+            lines.append("当前为默认文件工具模式，不提供 LocalShellBackend 的宿主机 shell 执行能力。")
+        if include_command_hint:
+            lines.append("命令：/backend status | /backend filesystem | /backend local_shell | /shell on | /shell off")
+        return "\n".join(lines)
 
     async def chat(self, user_input: str) -> str:
         """Process a chat message and return the response."""

@@ -15,6 +15,7 @@ class FakeBackend:
         self.initialized = False
         self.shutdown_called = False
         self.messages: list[str] = []
+        self.backend_mode = "filesystem"
 
     async def initialize(self) -> bool:
         self.initialized = True
@@ -42,6 +43,10 @@ class FakeBackend:
         self.messages.clear()
         return 2
 
+    def switch_deepagents_backend(self, mode: str) -> str:
+        self.backend_mode = mode
+        return f"backend:{mode}"
+
     def find_local_files(self, query: str, limit: int = 8) -> list[str]:
         return [f"{query}-{limit}"]
 
@@ -52,6 +57,7 @@ class FakeBackend:
             session_number=1,
             provider="openai",
             model="gpt",
+            backend_mode=self.backend_mode,
             connected_servers=("filesystem",),
             loaded_skills=("review",),
             usage=UsageSnapshot(prompt_tokens=1, completion_tokens=2, total_tokens=3),
@@ -65,6 +71,9 @@ def test_resolve_user_input_commands() -> None:
     assert service.resolve_user_input("  /clear ").type == "clear"
     assert service.resolve_user_input("/new").type == "new_session"
     assert service.resolve_user_input("/exit").type == "exit"
+    assert service.resolve_user_input("/backend").type == "backend_status"
+    assert service.resolve_user_input("/backend local_shell").message == "local_shell"
+    assert service.resolve_user_input("/shell off").message == "filesystem"
     chat_intent = service.resolve_user_input(" hello ")
     assert chat_intent.type == "chat"
     assert chat_intent.message == "hello"
@@ -77,7 +86,32 @@ def test_find_commands_supports_prefix_and_description() -> None:
 
     assert suggestions
     assert suggestions[0] == ("/new", "开启新会话并清空上下文")
-    assert all(command in {"/new", "/clear", "/exit"} for command, _ in suggestions)
+    assert all(
+        command
+        in {
+            "/new",
+            "/clear",
+            "/backend status",
+            "/backend filesystem",
+            "/backend local_shell",
+            "/shell on",
+            "/shell off",
+            "/exit",
+        }
+        for command, _ in suggestions
+    )
+
+
+def test_get_status_message_and_switch_backend_delegate() -> None:
+    backend = FakeBackend()
+    service = ChatApplicationService(backend)
+
+    status_message = service.get_status_message()
+    switch_message = service.switch_deepagents_backend("local_shell")
+
+    assert "FilesystemBackend" in status_message
+    assert switch_message == "backend:local_shell"
+    assert backend.backend_mode == "local_shell"
 
 
 @pytest.mark.asyncio

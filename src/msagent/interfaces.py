@@ -27,6 +27,7 @@ class AgentStatus:
     session_number: int
     provider: str
     model: str
+    backend_mode: str
     connected_servers: tuple[str, ...]
     loaded_skills: tuple[str, ...]
     usage: UsageSnapshot | None = None
@@ -83,6 +84,8 @@ class AgentBackend(Protocol):
     def clear_history(self) -> None: ...
 
     def start_new_session(self) -> int: ...
+
+    def switch_deepagents_backend(self, mode: str) -> str: ...
 
     def find_local_files(self, query: str, limit: int = 8) -> list[str]: ...
 
