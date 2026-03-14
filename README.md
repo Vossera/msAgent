@@ -23,7 +23,7 @@
 - ⏱️ 下发与调度问题：下发延迟、CPU 侧调度阻塞等
 - 🧩 集群性能问题：慢节点识别与从全局到单机的逐层定位
 - 🔌 MCP 扩展：基于 Model Context Protocol 接入工具（默认启用 [msprof-mcp](https://gitcode.com/kali20gakki1/msprof_mcp)）
-- 🧠 Skills 扩展：自动加载 `skills/` 目录技能，复用领域分析流程和知识（仓库：[mindstudio-skills](https://github.com/kali20gakki/mindstudio-skills)）
+- 🧠 Skills 扩展：自动加载 `<working-dir>/skills` 与内置 `resources/skills/` 技能，复用领域分析流程和知识（仓库：[mindstudio-skills](https://github.com/kali20gakki/mindstudio-skills)）
 ---
 
 ## ⚡ 快速上手
@@ -424,8 +424,7 @@ LOG_LEVEL=DEBUG
 Skills 会按以下候选目录自动加载：
 
 - `<working-dir>/skills`
-- 仓库根目录 `skills/`
-- 安装包内置技能目录
+- 内置 `resources/skills/`
 - `<working-dir>/.msagent/skills`
 
 支持两种目录结构：
@@ -469,13 +468,13 @@ bash scripts/build_whl.sh
 Windows（CMD）：
 
 ```cmd
-git submodule update --init --recursive --force --depth 1 skills
+git submodule update --init --recursive --force --depth 1 resources/skills
 uv build --wheel --out-dir dist .
 ```
 
 如果你的 Windows 环境安装了 Git Bash / WSL，也可以直接执行 `bash scripts/build_whl.sh`。
 
-构建脚本会自动执行 `git submodule update --init --recursive --force --depth 1 skills`，确保 `mindstudio-skills` 被打入 wheel 包。
+构建脚本会自动执行 `git submodule update --init --recursive --force --depth 1 resources/skills`，确保 `mindstudio-skills` 被打入 wheel 包。
 
 打包完成后会在 `dist/` 目录生成 `mindstudio_agent-*.whl`，可直接安装：
 

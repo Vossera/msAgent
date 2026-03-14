@@ -1,5 +1,6 @@
 import asyncio
 import re
+from importlib.resources import files
 from pathlib import Path
 
 import yaml
@@ -58,12 +59,16 @@ class SkillFactory:
         self._module_map: dict[str, str] = {}
 
     @staticmethod
+    def get_default_skills_dir() -> Path:
+        return Path(str(files("resources") / "skills"))
+
+    @staticmethod
     def get_repo_skills_dir() -> Path:
-        return Path(__file__).resolve().parents[3] / "skills"
+        return SkillFactory.get_default_skills_dir()
 
     @staticmethod
     def get_packaged_skills_dir() -> Path:
-        return Path(__file__).resolve().parent
+        return SkillFactory.get_default_skills_dir()
 
     async def load_skills(
         self, skills_dir: Path | list[Path] | tuple[Path, ...]

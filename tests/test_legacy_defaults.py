@@ -70,17 +70,21 @@ content
 
 def test_initializer_resolves_default_skill_search_order(tmp_path: Path) -> None:
     init = Initializer()
-    repo_skills = tmp_path / "repo-skills"
-    packaged_skills = tmp_path / "packaged-skills"
+    default_skills = tmp_path / "resources" / "skills"
 
-    init.skill_factory.get_repo_skills_dir = lambda: repo_skills
-    init.skill_factory.get_packaged_skills_dir = lambda: packaged_skills
+    init.skill_factory.get_default_skills_dir = lambda: default_skills
 
     skill_dirs = init._resolve_skills_dirs(tmp_path)
 
     assert skill_dirs == [
         tmp_path / "skills",
-        repo_skills,
-        packaged_skills,
+        default_skills,
         tmp_path / CONFIG_SKILLS_DIR,
     ]
+
+
+def test_skill_factory_default_skills_dir_uses_resources_package() -> None:
+    default_skills_dir = SkillFactory.get_default_skills_dir()
+
+    assert default_skills_dir.name == "skills"
+    assert default_skills_dir.parent.name == "resources"

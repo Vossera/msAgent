@@ -231,8 +231,7 @@ class Initializer:
     def _resolve_skills_dirs(self, working_dir: Path) -> list[Path]:
         candidates = [
             working_dir / "skills",
-            self.skill_factory.get_repo_skills_dir(),
-            self.skill_factory.get_packaged_skills_dir(),
+            self.skill_factory.get_default_skills_dir(),
             working_dir / CONFIG_SKILLS_DIR,
         ]
 
