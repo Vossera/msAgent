@@ -31,6 +31,11 @@ permissions:
 
 jobs:
   build-wheel:
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      wheel_name: ${{ steps.meta.outputs.wheel_name }}
+      sha256: ${{ steps.meta.outputs.sha256 }}
+      run_url: ${{ steps.meta.outputs.run_url }}
     runs-on: ubuntu-latest
 
     steps:
@@ -48,15 +53,30 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Build wheel
-        id: build
-        env:
-          WHEEL_ARTIFACT_NAME: mindstudio-agent-wheel-${{ github.run_number }}
         run: bash scripts/build_whl.sh
+
+      - name: Collect wheel metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          WHEEL_PATH="$(find dist -maxdepth 1 -type f -name '*.whl' | sort | tail -n 1)"
+          test -n "${WHEEL_PATH}"
+          WHEEL_NAME="$(basename "${WHEEL_PATH}")"
+          SHA256="$(sha256sum "${WHEEL_PATH}" | awk '{print $1}')"
+          ARTIFACT_NAME="mindstudio-agent-wheel-${{ github.run_number }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "artifact_name=${ARTIFACT_NAME}"
+            echo "wheel_name=${WHEEL_NAME}"
+            echo "sha256=${SHA256}"
+            echo "run_url=${RUN_URL}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.build.outputs.artifact_name }}
+          name: ${{ steps.meta.outputs.artifact_name }}
           path: dist/*.whl
           if-no-files-found: error
 
@@ -68,10 +88,10 @@ jobs:
 
       - name: Add download summary
         env:
-          RUN_URL: ${{ steps.build.outputs.run_url }}
-          WHEEL_NAME: ${{ steps.build.outputs.wheel_name }}
-          SHA256: ${{ steps.build.outputs.sha256 }}
-          ARTIFACT_NAME: ${{ steps.build.outputs.artifact_name }}
+          RUN_URL: ${{ steps.meta.outputs.run_url }}
+          WHEEL_NAME: ${{ steps.meta.outputs.wheel_name }}
+          SHA256: ${{ steps.meta.outputs.sha256 }}
+          ARTIFACT_NAME: ${{ steps.meta.outputs.artifact_name }}
         run: |
           {
             echo "## Download"
@@ -112,7 +132,7 @@ jobs:
       - name: Download wheel artifact
         uses: actions/download-artifact@v4
         with:
-          name: mindstudio-agent-wheel-${{ github.run_number }}
+          name: ${{ needs['build-wheel'].outputs.artifact_name }}
           path: dist
 
       - name: Install wheel with uv
