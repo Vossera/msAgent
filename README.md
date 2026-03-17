@@ -133,6 +133,17 @@ Windows：
 
 ---
 
+## 使用效果展示
+
+| 场景     | 效果展示 |
+|--------|---|
+| MFU 计算 | <img src="https://github.com/luelueFLY/images/blob/main/img/op-mfu-calculate.png" alt="MFU 计算示例" width="800"> |
+| 快慢卡诊断  | <img src="https://github.com/luelueFLY/images/blob/main/img/slow-rank-detect.png" alt="快慢卡诊断示例" width="800"> |
+
+---
+
+
+
 ## 📚 常用命令
 
 | 命令 | 说明 |
@@ -552,26 +563,6 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 
 ---
 
-## 👨‍💻 开发
-
-以下命令在 Linux / macOS / Windows 一致：
-
-```bash
-uv sync --dev
-uv run pytest
-uv run ruff check .
-uv run ruff format .
-```
-
----
-
-## 使用效果展示
-
-| 场景     | 效果展示 |
-|--------|---|
-| MFU 计算 | <img src="https://github.com/luelueFLY/images/blob/main/img/op-mfu-calculate.png" alt="MFU 计算示例" width="800"> |
-| 快慢卡诊断  | <img src="https://github.com/luelueFLY/images/blob/main/img/slow-rank-detect.png" alt="快慢卡诊断示例" width="800"> |
-
 ---
 
 ## 版本说明
@@ -592,6 +583,7 @@ msagent --version
 
 ---
 
-## 📄 许可证
 
-MIT License
+## 🙏 引用与致谢
+
+本项目在架构设计与实现思路上参考了 [`langrepl`](https://github.com/midodimori/langrepl) 项目，在此向其作者与贡献者表示感谢。
