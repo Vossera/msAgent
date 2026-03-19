@@ -9,7 +9,7 @@
   <img src="https://github.com/luelueFLY/images/blob/main/img/agent-gif-05.gif" alt="msAgent">
 </p>
 
-📌 文档导航：[最新消息](#最新消息) ｜ [版本说明](#版本说明) ｜ [使用效果展示](#使用效果展示)
+<p align="center">📌 文档导航：<a href="#最新消息">最新消息</a> ｜ <a href="#版本说明">版本说明</a> ｜ <a href="#使用效果展示">使用效果展示</a></p>
 
 
 ## 最新消息
@@ -18,12 +18,12 @@
 
 ## 🔍 支持的分析场景与扩展能力
 
-- ⚙️ 单卡性能问题：高耗时算子、计算热点、重叠度不足等
-- 🔗 多卡性能问题：快慢卡差异、通信效率瓶颈、同步等待等
-- ⏱️ 下发与调度问题：下发延迟、CPU 侧调度阻塞等
-- 🧩 集群性能问题：慢节点识别与从全局到单机的逐层定位
-- 🔌 MCP 扩展：基于 Model Context Protocol 接入工具（默认随 PyPI 包安装启用 `msprof-mcp==0.1.4`）
-- 🧠 Skills 扩展：自动加载 `<working-dir>/skills` 与内置 Skills；源码仓库中的内置 Skills 由 `resources/configs/default/skills/` 下的 `mindstudio-skills` 子模块提供，复用领域分析流程和知识（仓库：[mindstudio-skills](https://github.com/kali20gakki/mindstudio-skills)）
+- ⚙️ 覆盖单卡、多卡到集群的性能分析
+- 🔎 支持算子热点、通信瓶颈、快慢卡、慢节点、下发调度等常见问题定位
+- 📊 支持 MFU 计算、快慢卡诊断等典型分析任务
+- 🖼️ 具体示例提示词和效果截图可参考下文的 [使用效果展示](#使用效果展示)
+- 🔌 支持 MCP 扩展，默认随 PyPI 包安装启用 [`msprof-mcp`](https://github.com/kali20gakki/msprof-mcp)
+- 🧠 支持 Skills 扩展；源码仓库中的内置 Skills 由 [`mindstudio-skills`](https://github.com/kali20gakki/mindstudio-skills) 子模块提供
 ---
 
 ## ⚡ 快速上手
@@ -325,11 +325,22 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 
 | 项目 | 说明 |
 |---|---|
-| 当前版本 | `0.1.0` |
+| 当前版本 | `0.1.0`（首个 PyPI 发布版本） |
+| 发布方式 | 支持通过 `pip install -U mindstudio-agent` 直接安装 |
 | 包名 | `mindstudio-agent` |
 | 命令行入口 | `msagent` |
 | Python 要求 | `>=3.11` |
+| 默认内置扩展 | `msprof-mcp==0.1.4` |
 | 版本策略 | 遵循语义化版本（SemVer），补丁版本以兼容性修复为主，次版本新增功能保持向后兼容，主版本包含不兼容变更。 |
+
+### `0.1.0` 能力概览
+
+- 支持通过 CLI 直接分析 Profiling 数据，既可进入交互式会话，也可执行单轮问题分析
+- 支持单卡、多卡到集群的性能定位，覆盖算子热点、通信瓶颈、快慢卡、慢节点、下发调度等常见问题
+- 支持 MFU 计算、快慢卡诊断、Profiling 数据检查等典型任务，具体示例可参考上文的 [使用效果展示](#使用效果展示)
+- 支持 OpenAI 兼容 API 与 `custom` HTTP 接口配置，可按项目写入默认模型
+- 支持 MCP 扩展，默认随安装启用 `msprof-mcp`
+- 支持 Skills 扩展；源码仓库中的内置 Skills 由 [`mindstudio-skills`](https://github.com/kali20gakki/mindstudio-skills) 子模块提供
 
 可通过以下命令查看本地安装版本：
 
