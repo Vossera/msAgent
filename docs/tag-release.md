@@ -44,7 +44,7 @@
 
 如果这里没有提前配置好，tag 推送后 `publish-pypi` 会失败。
 
-## 2. 修改版本号
+## 2. 修改版本号并同步 lockfile
 
 发版前，先修改 `pyproject.toml` 中的版本号：
 
@@ -64,15 +64,29 @@ version = "0.1.1"
 
 - tag 必须与版本号严格对应
 - 如果版本号是 `0.1.1`，tag 就必须是 `v0.1.1`
+- 只要你改了 `pyproject.toml`，无论是 `project.version`、`dependencies` 还是 `dependency-groups`，都要立刻同步 `uv.lock`
+
+修改完 `pyproject.toml` 后，先执行：
+
+```bash
+uv lock
+git diff -- pyproject.toml uv.lock
+```
+
+说明：
+
+- 当前仓库的 `scripts/build_whl.sh` 和 `.github/workflows/publish-release.yml` 都会执行 `uv lock --check`
+- 如果你只改了 `pyproject.toml` 没有提交新的 `uv.lock`，本地构建和 CI 都会直接失败
+- 即使只是把版本号从 `0.1.0` 改成 `0.1.1`，也需要同步 `uv.lock`，因为 lockfile 里记录了根包 `mindstudio-agent` 的版本信息
 
 ## 3. 本地自检
 
 建议在打 tag 前，先本地执行一次最小自检：
 
 ```bash
-uv lock --check
 uv sync --dev
 uv run pytest -q
+uv lock --check
 bash scripts/build_whl.sh
 python -m build --sdist --outdir dist
 ```
@@ -88,7 +102,7 @@ python -m build --sdist --outdir dist
 版本号修改完成后，先提交并推送代码：
 
 ```bash
-git add pyproject.toml
+git add pyproject.toml uv.lock
 git commit -m "chore: release v0.1.1"
 git push origin main
 ```
@@ -171,7 +185,33 @@ msagent --version
 
 ## 9. 常见失败原因
 
-### 9.1 tag 和版本号不一致
+### 9.1 `uv.lock` 未同步
+
+典型报错：
+
+```text
+The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+```
+
+这通常说明你已经改了 `pyproject.toml`，但还没有重新生成并提交 `uv.lock`。
+
+常见触发场景：
+
+- 修改了 `project.version`
+- 增删或升级了 `dependencies`
+- 修改了 `dependency-groups.dev`
+
+处理方式：
+
+```bash
+uv lock
+git add pyproject.toml uv.lock
+bash scripts/build_whl.sh
+```
+
+如果本地自检已经通过，再继续提交和打 tag。
+
+### 9.2 tag 和版本号不一致
 
 例如：
 
@@ -180,15 +220,15 @@ msagent --version
 
 这种情况会在 `validate-tag` 阶段直接失败。
 
-### 9.2 PyPI Trusted Publisher 未配置
+### 9.3 PyPI Trusted Publisher 未配置
 
 这种情况通常会在 `publish-pypi` 阶段失败。
 
-### 9.3 同版本已经发布过
+### 9.4 同版本已经发布过
 
 PyPI 不允许覆盖上传同一个版本号，遇到这种情况需要递增版本号后重新发版。
 
-### 9.4 子模块内容缺失
+### 9.5 子模块内容缺失
 
 当前打包流程要求 `resources/configs/default/skills` 有有效内容。
 

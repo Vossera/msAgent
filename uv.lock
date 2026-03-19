@@ -2042,7 +2042,7 @@ wheels = [
 
 [[package]]
 name = "mindstudio-agent"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -2120,7 +2120,7 @@ requires-dist = [
     { name = "markdown-it-py", specifier = "~=4.0.0" },
     { name = "mcp", specifier = ">=1.13.0,<2.0.0" },
     { name = "mdformat", specifier = "~=1.0.0" },
-    { name = "msprof-mcp", specifier = "==0.1.4" },
+    { name = "msprof-mcp", specifier = "==0.1.6" },
     { name = "packaging", specifier = ">=24.0,<26.0" },
     { name = "pathspec", specifier = ">=0.12.1,<1.1.0" },
     { name = "prompt-toolkit", specifier = "~=3.0.52" },
@@ -2172,7 +2172,7 @@ wheels = [
 
 [[package]]
 name = "msprof-mcp"
-version = "0.1.4"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
@@ -2180,13 +2180,13 @@ dependencies = [
     { name = "pandas" },
     { name = "perfetto" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/66/5abb1b9838b34a4d9af417023ac33a055e97810874007172235442099819/msprof_mcp-0.1.4.tar.gz", hash = "sha256:4a96d756aed8518aaa0c9b88da9d1e47d4ac1495d2587695db91c1613c02a307", size = 26752973, upload-time = "2026-03-17T12:08:59.696Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/d6/7ee70ec64f5771382a38c7ee2110ce6518c1e5c0a6ebf75a62d17df5c998/msprof_mcp-0.1.6.tar.gz", hash = "sha256:ee688bbd56f1266ff934539b245ab47a5d96252deb27319cc7b81fa1387536ca", size = 26753097, upload-time = "2026-03-19T09:14:43.178Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/08/8978e84181868942f09e4c1704fe3ca17403e3693f090e614033a2d7dd3a/msprof_mcp-0.1.4-py3-none-macosx_15_0_arm64.whl", hash = "sha256:4654615d96ba5584125f804514f17ec76ba74911f966fa7033b80c84f1971b28", size = 4234983, upload-time = "2026-03-17T12:08:47.387Z" },
-    { url = "https://files.pythonhosted.org/packages/5a/38/400c70d08d6483534d0f30ffd90ab0e0e6fe8cefb22ee561e6d6991dd97c/msprof_mcp-0.1.4-py3-none-macosx_15_0_x86_64.whl", hash = "sha256:b16ddc9bb4b609f2e879531de9155b07ee1f3b2c527822e7f33b899920d2865e", size = 4619880, upload-time = "2026-03-17T12:08:49.784Z" },
-    { url = "https://files.pythonhosted.org/packages/64/a1/d3aa2fde0d22be188299332d6e16787820237206a19058e5a5882ea1df1d/msprof_mcp-0.1.4-py3-none-manylinux_2_23_aarch64.whl", hash = "sha256:ceae6db8febe08dcfb7ad2ee83e1448795503b91b866eefc9c26d31d64058db6", size = 4506495, upload-time = "2026-03-17T12:08:51.59Z" },
-    { url = "https://files.pythonhosted.org/packages/bc/a0/096addeffa60100ca726a34a61a4f18d9c4f7d474ade5865ce90f471818b/msprof_mcp-0.1.4-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:dd4e0fe49a3826e7c27de741aea0c5e1d0855cef94d1437834bf068789ff1e3d", size = 4731118, upload-time = "2026-03-17T12:08:53.537Z" },
-    { url = "https://files.pythonhosted.org/packages/30/9b/3e930b337daef12ef58d610319a640bdf86635e2bdf3242c4c180adca3ae/msprof_mcp-0.1.4-py3-none-win_amd64.whl", hash = "sha256:86659ded14ab2ec5be86a68faa2346069c16e2e11b47b23a9a81f64ab1997a4f", size = 4600090, upload-time = "2026-03-17T12:08:56.171Z" },
+    { url = "https://files.pythonhosted.org/packages/44/de/81f7b4e7bc2674694176d588b2a23c087d1d7a4b142399c5fbf0f64f70ef/msprof_mcp-0.1.6-py3-none-macosx_15_0_arm64.whl", hash = "sha256:aae5d2a5593784f1038a89808b5554ff4b4ac7e3fe9bbd35222fe795d5f6010a", size = 4235291, upload-time = "2026-03-19T09:14:34.83Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/0b/c4b799de41a605012e7c4c398fe4a364d04b1e925219013cfffe02a13318/msprof_mcp-0.1.6-py3-none-macosx_15_0_x86_64.whl", hash = "sha256:6f7d0fa551dc22d918b1bcca5b98fcb6b4e748b4f8a41a005c623fcc05226fd3", size = 4620184, upload-time = "2026-03-19T09:14:36.481Z" },
+    { url = "https://files.pythonhosted.org/packages/38/df/c7ab4064888b979295974174f7dd448f48a8183526877acb1527776ec845/msprof_mcp-0.1.6-py3-none-manylinux_2_23_aarch64.whl", hash = "sha256:ad6cf1643200d052de7a3ae9e1138a232f432417f6d0d3ecfebaa7a195b9e16f", size = 4506801, upload-time = "2026-03-19T09:14:38.161Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/bc/162496109efaea3223ecb09bf408b66afd123651204a0155838bcfa422c4/msprof_mcp-0.1.6-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:6365947dd67d05ba2d2fdb0f13bce874f39f9e1116cb5ad695514c19c9479305", size = 4731425, upload-time = "2026-03-19T09:14:39.652Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/6a/91cec0439a3b54309666c983a6e8c04074088a90bc031641c3da5a5d1ff1/msprof_mcp-0.1.6-py3-none-win_amd64.whl", hash = "sha256:a9b01c11cbbb97ec0e1050bfa92bbe2dc7f8b0dc9fb71f2ae0104748ff8fb0d9", size = 4600395, upload-time = "2026-03-19T09:14:41.304Z" },
 ]
 
 [[package]]

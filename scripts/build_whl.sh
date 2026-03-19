@@ -94,10 +94,12 @@ build_wheel() {
 
   if command_exists uv; then
     log "Checking uv.lock is in sync with pyproject.toml..."
-    (
+    if ! (
       cd "${REPO_ROOT}"
       uv lock --check
-    )
+    ); then
+      fail "uv.lock is out of sync with pyproject.toml. If you changed project.version, dependencies, or dependency-groups, run 'uv lock', commit the updated uv.lock, and rerun the build."
+    fi
 
     log "Building wheel with uv..."
     uv build --wheel --out-dir "${DIST_DIR}" "${REPO_ROOT}"
