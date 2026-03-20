@@ -36,16 +36,44 @@
 - glibc >= 2.34 (msprof-mcp trace_processor binary required)
 
 ### 2) 📦 安装
-说明：
-- 下文中的 `msagent` 适用于已安装命令行入口的场景。
-- 如果你是源码运行（`git clone` + `uv sync`），请把示例里的 `msagent` 替换成 `uv run msagent`。
-- Windows 示例默认使用 CMD；若使用 PowerShell，请把 `set XXX_KEY=value` 改为 `$env:XXX_KEY = "value"`。
+推荐优先使用 **PyPI 安装**。如果你需要跟踪最新源码、参与开发，或同步最新内置 Skills，再使用**源码运行**方式。
 
-推荐方式：直接从 PyPI 安装
+说明：
+- 下文中的 `msagent` 默认指已安装的命令行入口
+- 如果采用源码运行，请将示例中的 `msagent` 替换为 `uv run msagent`
+
+#### 方式一：PyPI 安装（推荐）
 
 ```bash
 pip install -U mindstudio-agent
 ```
+
+#### 方式二：源码运行（开发 / 跟踪最新代码）
+
+拉取源码并进入目录：
+
+```bash
+git clone --recurse-submodules https://github.com/kali20gakki/msAgent.git
+cd msAgent
+git submodule sync --recursive
+```
+
+如需同步 `mindstudio-skills` 上游最新版本，再执行：
+
+```bash
+git submodule update --init --recursive --remote resources/configs/default/skills
+```
+
+如果你只需要使用当前仓库锁定的 Skills 版本，可以跳过这一步。
+
+安装依赖并启动：
+
+```bash
+uv sync
+uv run msagent
+```
+
+#### 常用命令
 
 检查版本：
 
@@ -53,66 +81,64 @@ pip install -U mindstudio-agent
 msagent --version
 ```
 
-Debug: 如果你希望开启详细日志输出，可以追加 `-v` 参数：
+开启详细日志：
 
 ```bash
 msagent -v
 ```
 
-启用后会同时输出控制台详细日志，并将日志写入当前工作目录下的 `./.msagent/logs/app.log`。
+启用后会同时输出控制台详细日志，并写入当前工作目录下的 `./.msagent/logs/app.log`。
 
-如果你希望跟踪最新源码、参与开发，或需要同步最新的内置 Skills，可以使用源码运行方式：
-
-```bash
-git clone --recurse-submodules https://github.com/kali20gakki/msAgent.git
-cd msAgent
-git submodule sync --recursive
-# 如果要同步 mindstudio-skills 上游最新版本，再执行下一行
-git submodule update --init --recursive --remote resources/configs/default/skills
-uv sync
-```
-
-### 3) 🔐 配置默认 LLM
+### 3) 🔐 配置 LLM
 
 当前 `config` 子命令直接支持的 Provider 是：`openai`、`anthropic`、`gemini`、`google`、`custom`。
 
-对于兼容 OpenAI API 的服务，推荐使用 `openai` provider，并通过 `--llm-base-url` 指定服务地址。
+选型建议：
+- OpenAI 兼容接口：使用 `openai`
+- 非 OpenAI 兼容、自定义 HTTP 接口：使用 `custom`
 
-OpenAI 兼容 API 示例（以 DeepSeek `deepseek-chat` 为例）：
+下面命令使用 Linux / macOS 的环境变量写法；Windows CMD 请改成 `set KEY=value`，PowerShell 请改成 `$env:KEY = "value"`。
 
-Linux / macOS：
+#### OpenAI 兼容接口
+
+以 DeepSeek `deepseek-chat` 为例：
 
 ```bash
 export OPENAI_API_KEY="your-key"
 msagent config --llm-provider openai --llm-base-url "https://api.deepseek.com/v1" --llm-model "deepseek-chat"
 ```
 
-Windows（CMD）：
+#### 本地 OpenAI 兼容服务
 
-```cmd
-set OPENAI_API_KEY=your-key
-msagent config --llm-provider openai --llm-base-url "https://api.deepseek.com/v1" --llm-model "deepseek-chat"
+如果是本地部署的 OpenAI 兼容服务，例如 **vLLM** 暴露的 OpenAI-compatible API，即使服务端不校验 API Key，也可以继续使用 `openai` provider：
+
+```bash
+export OPENAI_API_KEY="dummy"
+msagent config --llm-provider openai --llm-base-url "http://127.0.0.1:8000/v1" --llm-model "your-model"
 ```
 
-Windows（PowerShell）：
+- `OPENAI_API_KEY` 只需任意非空字符串，不需要是真实密钥
+- `--llm-base-url` 对于 vLLM 一般填写服务根路径，例如 `http://127.0.0.1:8000/v1`
 
-```powershell
-$env:OPENAI_API_KEY = "your-key"
-msagent config --llm-provider openai --llm-base-url "https://api.deepseek.com/v1" --llm-model "deepseek-chat"
-```
+#### 自定义 HTTP 接口
 
-Custom 示例（适用于不兼容 OpenAI API、需要直接请求指定 HTTP 接口的场景）：
-
-Linux / macOS：
+如果你的服务不是 OpenAI 兼容协议，而是直接请求某个自定义 HTTP 接口，请改用 `custom` provider：
 
 ```bash
 export CUSTOM_API_KEY="your-key"
 msagent config --llm-provider custom --llm-base-url "https://example.com/chat/completions" --llm-model "my-model"
 ```
 
+如果你的自建接口不需要 API Key，可以不设置 `CUSTOM_API_KEY`，或先将其清空：
 
+```bash
+unset CUSTOM_API_KEY
+msagent config --llm-provider custom --llm-base-url "http://127.0.0.1:8000/v1/chat/completions" --llm-model "your-model"
+```
 
-查看当前项目配置：
+- `custom` provider 在未设置 `CUSTOM_API_KEY` 时，不会自动附带 `Authorization` 请求头
+
+#### 查看当前配置
 
 ```bash
 msagent config --show
