@@ -39,6 +39,8 @@ logger = get_logger(__name__)
 class MessageDispatcher:
     """Dispatch user message processing and AI response streaming."""
 
+    _MAX_LOG_VALUE_LENGTH = 400
+
     def __init__(self, session) -> None:
         """Initialize with reference to CLI session."""
         self.session = session
@@ -100,10 +102,10 @@ class MessageDispatcher:
                 )
 
         except Exception as e:
-            error_msg = str(e) or type(e).__name__
+            error_msg = self._format_console_error(e)
             console.print_error(f"Error processing message: {error_msg}")
             console.print("")
-            logger.debug("Message processing error", exc_info=True)
+            await self._log_processing_error(e)
 
     async def _stream_response(
         self,
@@ -233,6 +235,142 @@ class MessageDispatcher:
             if isinstance(message, (AIMessage, ToolMessage)):
                 self.session.renderer.render_message(message)
                 break
+
+    async def _log_processing_error(self, error: Exception) -> None:
+        """Log a message-processing failure with LLM and HTTP context."""
+        log_fields = [
+            f"thread_id={self.session.context.thread_id}",
+            f"agent={self.session.context.agent}",
+            f"model_alias={self.session.context.model}",
+        ]
+        log_fields.extend(await self._resolve_llm_log_fields())
+        log_fields.extend(self._resolve_http_log_fields(error))
+
+        exception_chain = self._format_exception_chain(error)
+        if exception_chain:
+            log_fields.append(f"exception_chain={exception_chain}")
+
+        logger.exception("Message processing error [%s]", ", ".join(log_fields))
+
+    async def _resolve_llm_log_fields(self) -> list[str]:
+        """Resolve the current model configuration for error logging."""
+        try:
+            llm_config = await initializer.load_llm_config(
+                self.session.context.model,
+                Path(self.session.context.working_dir),
+            )
+        except Exception:
+            logger.debug("Failed to resolve LLM config for error logging", exc_info=True)
+            return []
+
+        fields = [
+            f"provider={llm_config.provider.value}",
+            f"resolved_model={llm_config.model}",
+        ]
+        if llm_config.base_url:
+            fields.append(f"base_url={llm_config.base_url}")
+        return fields
+
+    @classmethod
+    def _resolve_http_log_fields(cls, error: BaseException) -> list[str]:
+        """Extract request/response context from the exception chain."""
+        fields: list[str] = []
+        request = cls._find_exception_attr(error, "request")
+        if request is not None:
+            method = getattr(request, "method", None)
+            url = getattr(request, "url", None)
+            if method and url:
+                fields.append(f"request={method} {url}")
+            elif url:
+                fields.append(f"request={url}")
+
+        status_code = cls._find_exception_attr(error, "status_code")
+        if status_code is not None:
+            fields.append(f"status_code={status_code}")
+
+        response_body = cls._extract_response_body(error)
+        if response_body:
+            fields.append(f"response_body={response_body}")
+
+        return fields
+
+    @classmethod
+    def _extract_response_body(cls, error: BaseException) -> str | None:
+        """Extract and normalize an API response body from the exception chain."""
+        body = cls._find_exception_attr(error, "body")
+        if body is not None and body != "":
+            return cls._truncate_log_value(repr(body))
+
+        response = cls._find_exception_attr(error, "response")
+        if response is not None:
+            text = getattr(response, "text", None)
+            if text:
+                return cls._truncate_log_value(str(text))
+
+        return None
+
+    @classmethod
+    def _format_console_error(cls, error: BaseException) -> str:
+        """Build a concise terminal-friendly error message."""
+        message = (str(error) or type(error).__name__).strip()
+        if message != "Connection error.":
+            return message
+
+        chain = list(cls._walk_exception_chain(error))
+        for cause in chain[1:]:
+            cause_message = str(cause).strip()
+            if cause_message and cause_message != message:
+                return cls._truncate_log_value(
+                    f"{message} Cause: {type(cause).__name__}: {cause_message}",
+                    limit=200,
+                )
+        return message
+
+    @classmethod
+    def _format_exception_chain(cls, error: BaseException) -> str:
+        """Format the causal exception chain into a compact single line."""
+        parts: list[str] = []
+        for current in cls._walk_exception_chain(error):
+            message = (str(current) or type(current).__name__).strip()
+            parts.append(
+                f"{type(current).__name__}: "
+                f"{cls._truncate_log_value(message, limit=160)}"
+            )
+        return " <- ".join(parts)
+
+    @staticmethod
+    def _walk_exception_chain(
+        error: BaseException, max_depth: int = 8
+    ) -> list[BaseException]:
+        """Collect the exception and its direct causes without looping forever."""
+        chain: list[BaseException] = []
+        seen: set[int] = set()
+        current: BaseException | None = error
+
+        while current is not None and id(current) not in seen and len(chain) < max_depth:
+            chain.append(current)
+            seen.add(id(current))
+            current = current.__cause__ or current.__context__
+
+        return chain
+
+    @classmethod
+    def _find_exception_attr(cls, error: BaseException, attr: str) -> Any | None:
+        """Return the first non-empty attribute found in the exception chain."""
+        for current in cls._walk_exception_chain(error):
+            value = getattr(current, attr, None)
+            if value is not None and value != "":
+                return value
+        return None
+
+    @classmethod
+    def _truncate_log_value(cls, value: str, limit: int | None = None) -> str:
+        """Keep log fields compact and single-line."""
+        max_length = limit or cls._MAX_LOG_VALUE_LENGTH
+        normalized = " ".join(value.split())
+        if len(normalized) <= max_length:
+            return normalized
+        return f"{normalized[: max_length - 3]}..."
 
     @staticmethod
     def _extract_interrupts(chunk) -> list[Interrupt] | None:

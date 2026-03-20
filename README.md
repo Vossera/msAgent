@@ -39,7 +39,7 @@
 说明：
 - 下文中的 `msagent` 适用于已安装命令行入口的场景。
 - 如果你是源码运行（`git clone` + `uv sync`），请把示例里的 `msagent` 替换成 `uv run msagent`。
-- Windows 示例默认使用 CMD；若使用 PowerShell，请把 `set KEY=value` 改为 `$env:KEY = "value"`。
+- Windows 示例默认使用 CMD；若使用 PowerShell，请把 `set XXX_KEY=value` 改为 `$env:XXX_KEY = "value"`。
 
 推荐方式：直接从 PyPI 安装
 
@@ -52,6 +52,14 @@ pip install -U mindstudio-agent
 ```bash
 msagent --version
 ```
+
+Debug: 如果你希望开启详细日志输出，可以追加 `-v` 参数：
+
+```bash
+msagent -v
+```
+
+启用后会同时输出控制台详细日志，并将日志写入当前工作目录下的 `./.msagent/logs/app.log`。
 
 如果你希望跟踪最新源码、参与开发，或需要同步最新的内置 Skills，可以使用源码运行方式：
 

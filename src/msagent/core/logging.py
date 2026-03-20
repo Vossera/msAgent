@@ -30,6 +30,10 @@ def configure_logging(show_logs: bool = False, working_dir: Path = Path.cwd()) -
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
+    # Keep a no-op handler installed so Python's logging.lastResort
+    # does not dump ERROR tracebacks to stderr when verbose logging is off.
+    root_logger.addHandler(logging.NullHandler())
+
     # Suppress langchain warnings
     logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERROR)
     logging.getLogger("langchain_anthropic").setLevel(logging.ERROR)

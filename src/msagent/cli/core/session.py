@@ -141,7 +141,7 @@ class Session:
             except Exception as e:
                 console.print_error(f"Error processing input: {e}")
                 console.print("")
-                logger.debug("Input processing error", exc_info=True)
+                logger.exception("Input processing error")
 
         logger.info("Session ended")
 
