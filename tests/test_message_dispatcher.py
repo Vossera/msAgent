@@ -433,8 +433,8 @@ def test_render_assistant_with_deferred_tools_hides_header_until_result(
         render_assistant_message=lambda message, indent_level=0, show_tool_calls=True: rendered.append(
             ("assistant", indent_level, show_tool_calls, message)
         ),
-        render_tool_call=lambda tool_call, indent_level=0: rendered.append(
-            ("tool_call", indent_level, tool_call)
+        render_tool_call=lambda tool_call, indent_level=0, duration=None: rendered.append(
+            ("tool_call", indent_level, tool_call, duration)
         ),
         render_tool_message=lambda message, indent_level=0: rendered.append(
             ("tool_message", indent_level, message)
@@ -452,17 +452,16 @@ def test_render_assistant_with_deferred_tools_hides_header_until_result(
     dispatcher._render_assistant_with_deferred_tools(message, indent_level=1)
 
     assert rendered == [("assistant", 1, False, message)]
-    assert dispatcher._pending_tool_headers == {
-        "call-1": (
-            {
-                "name": "run_command",
-                "args": {"command": "ls"},
-                "id": "call-1",
-                "type": "tool_call",
-            },
-            1,
-        )
+    assert "call-1" in dispatcher._pending_tool_headers
+    pending = dispatcher._pending_tool_headers["call-1"]
+    assert pending[0] == {
+        "name": "run_command",
+        "args": {"command": "ls"},
+        "id": "call-1",
+        "type": "tool_call",
     }
+    assert pending[1] == 1
+    assert isinstance(pending[2], float)  # start_time
 
 
 def test_render_pending_tool_header_uses_deferred_header_before_result(tmp_path: Path) -> None:
@@ -470,8 +469,8 @@ def test_render_pending_tool_header_uses_deferred_header_before_result(tmp_path:
     rendered: list[tuple[str, Any]] = []
     session.renderer = SimpleNamespace(
         render_assistant_message=lambda *args, **kwargs: None,
-        render_tool_call=lambda tool_call, indent_level=0: rendered.append(
-            ("tool_call", indent_level, tool_call)
+        render_tool_call=lambda tool_call, indent_level=0, duration=None: rendered.append(
+            ("tool_call", indent_level, tool_call, duration)
         ),
         render_tool_message=lambda message, indent_level=0: rendered.append(
             ("tool_message", indent_level, message)
@@ -486,6 +485,7 @@ def test_render_pending_tool_header_uses_deferred_header_before_result(tmp_path:
             "type": "tool_call",
         },
         2,
+        1234567890.0,  # start_time
     )
     tool_message = message_module.ToolMessage(
         content="done",
@@ -496,19 +496,17 @@ def test_render_pending_tool_header_uses_deferred_header_before_result(tmp_path:
     dispatcher._render_pending_tool_header(tool_message, indent_level=0)
     session.renderer.render_tool_message(tool_message, indent_level=2)
 
-    assert rendered == [
-        (
-            "tool_call",
-            2,
-            {
-                "name": "run_command",
-                "args": {"command": "ls"},
-                "id": "call-1",
-                "type": "tool_call",
-            },
-        ),
-        ("tool_message", 2, tool_message),
-    ]
+    assert len(rendered) == 2
+    assert rendered[0][0] == "tool_call"
+    assert rendered[0][1] == 2
+    assert rendered[0][2] == {
+        "name": "run_command",
+        "args": {"command": "ls"},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    assert isinstance(rendered[0][3], float)  # duration
+    assert rendered[1] == ("tool_message", 2, tool_message)
     assert dispatcher._pending_tool_headers == {}
 
 
@@ -550,9 +548,13 @@ def test_tool_activity_indicator_blinks_dot_and_moves_sweep() -> None:
     second = indicator.render(0.32)
     third = indicator.render(0.64)
 
-    assert first.plain == "● Use tool run_command"
-    assert second.plain == "● Use tool run_command"
-    assert third.plain == "● Use tool run_command"
+    # Check format includes elapsed time (Claude Code style)
+    assert "● Use tool run_command" in first.plain
+    assert "(0.0s)" in first.plain
+    assert "● Use tool run_command" in second.plain
+    assert "(0.3s)" in second.plain
+    assert "● Use tool run_command" in third.plain
+    assert "(0.6s)" in third.plain
     assert second.spans[0].style != third.spans[0].style
     sweep_second = next(span for span in second.spans if span.style == "secondary")
     sweep_third = next(span for span in third.spans if span.style == "secondary")

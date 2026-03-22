@@ -388,7 +388,9 @@ class Renderer:
         return stripped or content
 
     @staticmethod
-    def _format_tool_call(tool_call: dict[str, Any], indent_level: int = 0) -> Text:
+    def _format_tool_call(
+        tool_call: dict[str, Any], indent_level: int = 0, duration: float | None = None
+    ) -> Text:
         """Format a single tool call with improved readability."""
         tool_name = tool_call.get("name", UNKNOWN)
         tool_args = cast(dict[str, Any], tool_call.get("args", {}))
@@ -401,6 +403,11 @@ class Renderer:
         result.append("● ", style="indicator")
         result.append("Use tool ", style=TOOL_PREFIX_STYLE)
         result.append(tool_name, style=TOOL_NAME_STYLE)
+
+        # Add duration if provided (Claude Code style)
+        if duration is not None:
+            result.append(" ", style=TOOL_PREFIX_STYLE)
+            result.append(f"({duration:.1f}s)", style="muted")
 
         if tool_args:
             summary_arg_items = [
@@ -520,9 +527,13 @@ class Renderer:
             console.print("")
 
     @staticmethod
-    def render_tool_call(tool_call: dict[str, Any], indent_level: int = 0) -> None:
+    def render_tool_call(
+        tool_call: dict[str, Any], indent_level: int = 0, duration: float | None = None
+    ) -> None:
         """Render a single tool call header."""
-        console.print(Renderer._format_tool_call(tool_call, indent_level=indent_level))
+        console.print(
+            Renderer._format_tool_call(tool_call, indent_level=indent_level, duration=duration)
+        )
 
     @staticmethod
     def render_tool_message(message: ToolMessage, indent_level: int = 0) -> None:

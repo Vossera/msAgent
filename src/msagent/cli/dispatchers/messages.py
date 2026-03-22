@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,6 +65,21 @@ class ToolActivityCall:
     name: str
     args: dict[str, Any]
     call_id: str | None = None
+    start_time: float = field(default_factory=time.time)
+
+    def __eq__(self, other: object) -> bool:
+        """Compare ToolActivityCall instances, ignoring start_time."""
+        if not isinstance(other, ToolActivityCall):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.args == other.args
+            and self.call_id == other.call_id
+        )
+
+    def __hash__(self) -> int:
+        """Hash based on name, args, and call_id only."""
+        return hash((self.name, self.call_id, tuple(sorted(self.args.items()))))
 
 
 @dataclass
@@ -99,7 +115,11 @@ class ToolActivityIndicator:
 
         label = self.text.copy()
         self._apply_sweep(label, phase)
-        header = Text.assemble(dot, " ", label)
+        
+        # Add elapsed time (Claude Code style)
+        elapsed_text = Text(f" ({elapsed:.1f}s)", style="muted")
+        
+        header = Text.assemble(dot, " ", label, elapsed_text)
         if self.details:
             return Group(header, self.details)
         return header
@@ -141,7 +161,7 @@ class MessageDispatcher:
         self.interrupt_handler = InterruptHandler(session=session)
         self.message_builder = MessageContentBuilder(Path(session.context.working_dir))
         self._pending_compression = False
-        self._pending_tool_headers: dict[str, tuple[dict[str, Any], int]] = {}
+        self._pending_tool_headers: dict[str, tuple[dict[str, Any], int, float]] = {}
 
     async def dispatch(self, content: str) -> None:
         """Dispatch user message and get AI response."""
@@ -601,7 +621,9 @@ class MessageDispatcher:
         return str(call_id) if call_id else None
 
     @classmethod
-    def _extract_tool_call_preview(cls, tool_call: Any) -> ToolActivityCall | None:
+    def _extract_tool_call_preview(
+        cls, tool_call: Any, start_time: float | None = None
+    ) -> ToolActivityCall | None:
         """Build a live preview entry from a tool call payload."""
         name = cls._extract_tool_name(tool_call)
         if not name:
@@ -610,6 +632,7 @@ class MessageDispatcher:
             name=name,
             args=cls._extract_tool_args(tool_call),
             call_id=cls._extract_tool_call_id(tool_call),
+            start_time=start_time if start_time is not None else time.time(),
         )
 
     @classmethod
@@ -1211,7 +1234,11 @@ class MessageDispatcher:
             call_id = tool_call.get("id")
             if not call_id:
                 continue
-            self._pending_tool_headers[str(call_id)] = (dict(tool_call), indent_level)
+            self._pending_tool_headers[str(call_id)] = (
+                dict(tool_call),
+                indent_level,
+                time.time(),
+            )
 
     def _render_assistant_with_deferred_tools(
         self, message: AIMessage, indent_level: int
@@ -1241,8 +1268,11 @@ class MessageDispatcher:
         if pending is None:
             return
 
-        tool_call, stored_indent = pending
-        self.session.renderer.render_tool_call(tool_call, indent_level=stored_indent)
+        tool_call, stored_indent, start_time = pending
+        duration = time.time() - start_time if start_time else None
+        self.session.renderer.render_tool_call(
+            tool_call, indent_level=stored_indent, duration=duration
+        )
 
     def _finalize_streaming(
         self,
