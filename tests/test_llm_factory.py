@@ -136,3 +136,19 @@ def test_factory_custom_requires_url() -> None:
         match="CUSTOM provider requires base_url or CUSTOM_BASE_URL to be set",
     ):
         factory.create(config)
+
+
+def test_factory_enables_stream_usage_for_openai_streaming_with_custom_base_url() -> None:
+    factory = LLMFactory(LLMSettings(openai_api_key=SecretStr("fake-openai-key")))
+    config = LLMConfig(
+        provider=LLMProvider.OPENAI,
+        model="gpt-5.4",
+        base_url="https://example.com/v1",
+        max_tokens=0,
+        temperature=0.7,
+        streaming=True,
+    )
+
+    llm = factory.create(config)
+
+    assert getattr(llm, "stream_usage", None) is True

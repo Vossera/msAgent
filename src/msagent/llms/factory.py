@@ -253,6 +253,7 @@ class LLMFactory:
                     "model": config.model,
                     "temperature": config.temperature,
                     "streaming": config.streaming,
+                    "stream_usage": True if config.streaming else None,
                     "rate_limiter": limiter,
                     "http_client": http_client,
                     "http_async_client": http_async_client,

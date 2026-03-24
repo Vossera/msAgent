@@ -18,7 +18,7 @@ from msagent.configs import ApprovalMode, LLMConfig, LLMProvider
 
 
 def _build_session(tmp_path: Path) -> SimpleNamespace:
-    return SimpleNamespace(
+    session = SimpleNamespace(
         prefilled_reference_mapping={},
         current_stream_task=None,
         context=SimpleNamespace(
@@ -30,9 +30,25 @@ def _build_session(tmp_path: Path) -> SimpleNamespace:
             stream_output=False,
             agent="msagent",
             model="default",
+            current_input_tokens=None,
+            current_output_tokens=None,
+            context_window=128000,
         ),
         graph=SimpleNamespace(),
+        prompt=SimpleNamespace(reset_interrupt_state=lambda: None),
+        renderer=SimpleNamespace(
+            render_assistant_message=lambda *args, **kwargs: None,
+            render_tool_call=lambda *args, **kwargs: None,
+            render_tool_message=lambda *args, **kwargs: None,
+        ),
     )
+
+    def update_context(**kwargs: Any) -> None:
+        for key, value in kwargs.items():
+            setattr(session.context, key, value)
+
+    session.update_context = update_context
+    return session
 
 
 @pytest.mark.asyncio
@@ -508,6 +524,127 @@ def test_render_pending_tool_header_uses_deferred_header_before_result(tmp_path:
     assert isinstance(rendered[0][3], float)  # duration
     assert rendered[1] == ("tool_message", 2, tool_message)
     assert dispatcher._pending_tool_headers == {}
+
+
+def test_merge_chunks_preserves_usage_metadata() -> None:
+    merged = MessageDispatcher._merge_chunks(
+        [
+            AIMessageChunk(content="Hello"),
+            AIMessageChunk(
+                content=" world",
+                usage_metadata={
+                    "input_tokens": 2048,
+                    "output_tokens": 256,
+                    "total_tokens": 2304,
+                },
+            ),
+        ]
+    )
+
+    assert merged.content == "Hello world"
+    assert merged.usage_metadata == {
+        "input_tokens": 2048,
+        "output_tokens": 256,
+        "total_tokens": 2304,
+    }
+
+
+@pytest.mark.asyncio
+async def test_update_token_tracking_falls_back_to_ai_message_usage_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _build_session(tmp_path)
+    dispatcher = MessageDispatcher(session)
+
+    async def fake_check_auto_compression() -> None:
+        return None
+
+    monkeypatch.setattr(
+        dispatcher,
+        "_check_auto_compression",
+        fake_check_auto_compression,
+    )
+
+    await dispatcher._update_token_tracking(
+        {
+            "messages": [
+                AIMessage(
+                    content="done",
+                    usage_metadata={
+                        "input_tokens": 4096,
+                        "output_tokens": 512,
+                        "total_tokens": 4608,
+                    },
+                )
+            ]
+        }
+    )
+
+    assert session.context.current_input_tokens == 4096
+    assert session.context.current_output_tokens == 512
+
+
+@pytest.mark.asyncio
+async def test_finalize_streaming_updates_context_from_usage_only_chunk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _build_session(tmp_path)
+    rendered: list[AIMessage] = []
+    session.renderer = SimpleNamespace(
+        render_assistant_message=lambda message, **kwargs: rendered.append(message),
+        render_tool_call=lambda *args, **kwargs: None,
+        render_tool_message=lambda *args, **kwargs: None,
+    )
+    dispatcher = MessageDispatcher(session)
+
+    async def fake_check_auto_compression() -> None:
+        return None
+
+    monkeypatch.setattr(
+        dispatcher,
+        "_check_auto_compression",
+        fake_check_auto_compression,
+    )
+
+    streaming_states = {
+        (): {
+            "active": True,
+            "message_id": "msg-1",
+            "preview_lines": ["Hello world"],
+            "chunks": [
+                AIMessageChunk(content="Hello"),
+                AIMessageChunk(content=" world"),
+                AIMessageChunk(
+                    content="",
+                    usage_metadata={
+                        "input_tokens": 2048,
+                        "output_tokens": 256,
+                        "total_tokens": 2304,
+                    },
+                ),
+            ],
+        }
+    }
+
+    await dispatcher._finalize_streaming(
+        (),
+        streaming_states,
+        None,
+        set(),
+        {},
+        {},
+    )
+
+    assert session.context.current_input_tokens == 2048
+    assert session.context.current_output_tokens == 256
+    assert len(rendered) == 1
+    assert rendered[0].usage_metadata == {
+        "input_tokens": 2048,
+        "output_tokens": 256,
+        "total_tokens": 2304,
+    }
 
 
 def test_build_activity_renderable_keeps_tool_line_separate(tmp_path: Path) -> None:

@@ -81,7 +81,7 @@ def _extract_nested_token_value(
     return None
 
 
-def _extract_usage_counts(message: AIMessage) -> tuple[int, int] | None:
+def extract_usage_counts(message: AIMessage) -> tuple[int, int] | None:
     """Extract input/output token counts from standardized and provider metadata."""
     candidates = [
         getattr(message, "usage_metadata", None),
@@ -136,6 +136,9 @@ def _extract_usage_counts(message: AIMessage) -> tuple[int, int] | None:
     return input_tokens or 0, output_tokens or 0
 
 
+_extract_usage_counts = extract_usage_counts
+
+
 class TokenCostMiddleware(AgentMiddleware[AgentState, AgentContext]):
     """Middleware to track token usage.
 
@@ -158,7 +161,7 @@ class TokenCostMiddleware(AgentMiddleware[AgentState, AgentContext]):
         if not isinstance(latest_message, AIMessage):
             return None
 
-        usage_counts = _extract_usage_counts(latest_message)
+        usage_counts = extract_usage_counts(latest_message)
         if usage_counts is None:
             return None
 

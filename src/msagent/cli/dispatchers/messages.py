@@ -34,6 +34,7 @@ from msagent.cli.handlers import CompressionHandler, InterruptHandler
 from msagent.cli.theme import console, theme
 from msagent.core.constants import OS_VERSION, PLATFORM
 from msagent.core.logging import get_logger
+from msagent.middlewares.token_cost import extract_usage_counts
 from msagent.utils.compression import should_auto_compress
 
 if TYPE_CHECKING:
@@ -296,7 +297,7 @@ class MessageDispatcher:
                                     thinking_previews,
                                 )
                             elif mode == "updates":
-                                self._finalize_streaming(
+                                await self._finalize_streaming(
                                     namespace,
                                     streaming_states,
                                     status,
@@ -317,7 +318,7 @@ class MessageDispatcher:
                     if status:
                         status.stop()
                     self.session.prompt.reset_interrupt_state()
-                    self._finalize_all_streaming(
+                    await self._finalize_all_streaming(
                         streaming_states,
                         status,
                         rendered_messages,
@@ -330,7 +331,7 @@ class MessageDispatcher:
                     break
 
                 if not interrupted:
-                    self._finalize_all_streaming(
+                    await self._finalize_all_streaming(
                         streaming_states,
                         status,
                         rendered_messages,
@@ -1088,7 +1089,7 @@ class MessageDispatcher:
                 not streaming_state["active"]
                 or streaming_state["message_id"] != message_id
             ):
-                self._finalize_streaming(
+                await self._finalize_streaming(
                     namespace,
                     streaming_states,
                     live,
@@ -1274,7 +1275,7 @@ class MessageDispatcher:
             tool_call, indent_level=stored_indent, duration=duration
         )
 
-    def _finalize_streaming(
+    async def _finalize_streaming(
         self,
         namespace: tuple,
         streaming_states: dict[tuple, dict[str, Any]],
@@ -1289,6 +1290,7 @@ class MessageDispatcher:
         if streaming_state["active"]:
             if streaming_state["chunks"]:
                 final_message = self._merge_chunks(streaming_state["chunks"])
+                await self._update_token_tracking({"messages": [final_message]})
                 indent_level = len(namespace)
                 self._render_assistant_with_deferred_tools(
                     final_message, indent_level=indent_level
@@ -1304,7 +1306,7 @@ class MessageDispatcher:
             )
             self._clear_preview(streaming_state)
 
-    def _finalize_all_streaming(
+    async def _finalize_all_streaming(
         self,
         streaming_states: dict[tuple, dict[str, Any]],
         live: Live | None,
@@ -1314,7 +1316,7 @@ class MessageDispatcher:
     ) -> None:
         """Finalize all active streaming messages."""
         for namespace in streaming_states:
-            self._finalize_streaming(
+            await self._finalize_streaming(
                 namespace,
                 streaming_states,
                 live,
@@ -1337,6 +1339,7 @@ class MessageDispatcher:
             content=merged.content,
             additional_kwargs=merged.additional_kwargs,
             response_metadata=merged.response_metadata,
+            usage_metadata=merged.usage_metadata,
             tool_calls=merged.tool_calls,
             id=merged.id,
             name=merged.name,
@@ -1349,14 +1352,19 @@ class MessageDispatcher:
             "current_output_tokens",
         }
 
-        # Check if any token tracking fields are present
-        if not any(field in node_data for field in token_fields):
-            return
-
-        # Extract and update context
         updates = {
             field: node_data.get(field) for field in token_fields if field in node_data
         }
+
+        if len(updates) < len(token_fields):
+            messages = node_data.get("messages") or []
+            latest_message = messages[-1] if messages else None
+            if isinstance(latest_message, AIMessage):
+                usage_counts = extract_usage_counts(latest_message)
+                if usage_counts is not None:
+                    input_tokens, output_tokens = usage_counts
+                    updates.setdefault("current_input_tokens", input_tokens)
+                    updates.setdefault("current_output_tokens", output_tokens)
 
         if updates:
             self.session.update_context(**updates)
