@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application.current import get_app
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.filters import completion_is_selected
+from prompt_toolkit.filters import Condition, completion_is_selected
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -97,6 +98,19 @@ class InteractivePrompt:
         """Create custom key bindings."""
         kb = KeyBindings()
         self.hotkeys.clear()
+
+        @Condition
+        def _buffer_is_empty() -> bool:
+            return not get_app().current_buffer.text.strip()
+
+        @kb.add(
+            Keys.Enter,
+            eager=True,
+            filter=_buffer_is_empty & ~completion_is_selected,
+        )
+        def _(event):
+            """Do not submit or advance the prompt when the line is empty."""
+            pass
 
         @kb.add(Keys.ControlC)
         def _(event):
@@ -254,9 +268,9 @@ class InteractivePrompt:
             result = await self.prompt_session.prompt_async(
                 prompt_text, default=default_text
             )  # type: ignore
-            print()
-
             content = result.strip()
+            if content:
+                print()
 
             is_command = False
             if content.startswith("/"):
